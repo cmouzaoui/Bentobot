@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 1.8)
+project( VideoDetect )
+find_package( OpenCV REQUIRED)
+add_executable( VideoDetect VideoDetect.cpp)
+target_link_libraries( VideoDetect ${OpenCV_LIBS})

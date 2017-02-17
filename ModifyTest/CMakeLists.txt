@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 2.8)
+project( ModifyImage )
+find_package( OpenCV REQUIRED)
+add_executable( ModifyImage ModifyTest.cpp)
+target_link_libraries( ModifyImage ${OpenCV_LIBS})

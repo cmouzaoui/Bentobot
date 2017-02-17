@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 2.8)
+project( Reduce )
+find_package( OpenCV REQUIRED)
+add_executable( Reduce how_to_scan_images.cpp)
+target_link_libraries( Reduce ${OpenCV_LIBS})

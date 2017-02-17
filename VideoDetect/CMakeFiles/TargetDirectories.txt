@@ -1,0 +1,3 @@
+/home/comrade/Docs/Homework/MAE162D/OpenCV/VideoDetect/CMakeFiles/rebuild_cache.dir
+/home/comrade/Docs/Homework/MAE162D/OpenCV/VideoDetect/CMakeFiles/edit_cache.dir
+/home/comrade/Docs/Homework/MAE162D/OpenCV/VideoDetect/CMakeFiles/VideoDetect.dir

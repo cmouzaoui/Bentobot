@@ -8,8 +8,11 @@
 using namespace std;
 using namespace cv;
 
-const int orange_min [3] = {9,26,228};
-const int orange_max [3] = {42,244,255};
+
+#define VECLEN 100
+
+const int orange_min [3] = {11,26,233};
+const int orange_max [3] = {30,217,255};
 const int blue_min [3] = {97,54,89};
 const int blue_max [3] = {127,180,189};
 
@@ -25,25 +28,25 @@ struct Threshold
 const Threshold orange = {.min = {9,26,228},
 							.max = {42,244,255}};
 
-const int veclen = 32;
+//function primitives
+
+
+void findInRange(Mat & src,Mat & dst,Mat & hsv, deque<Point> pts, Threshold main_thresh);
+void findCircle(Mat & src, Mat& dst);
+
 int main(int argc, char** argv)
 {
-	/*
-	if (argc != 2)
-	{
-			printf("usage: DisplayImage <Image_Path>\n");
-			return -1;
-	}
-	*/
 	// Initialize Videocapture
-	VideoCapture cap(0);
+	VideoCapture cap0(0);
+	VideoCapture cap1(1);
 
-	Mat src, dst, hsv;
-	deque<Point> pts; 
-	//src = imread( argv[1], CV_LOAD_IMAGE_COLOR);
-	
+	Mat src0, dst0, hsv0;
+	deque<Point> pts0; 
+
+	Mat src1, dst1, hsv1; 
+	deque<Point> pts1;
+
 	//create instance of threshold
-	//Threshold main_thresh = { .min={0,0,0}, .max={255,255,255}};
 	Threshold main_thresh = orange;
 
 	//create window for trackbar
@@ -59,12 +62,32 @@ int main(int argc, char** argv)
 	//begin loop
 	while(true)
 	{
-	cap >> src;
+	cap0 >> src0;
+	cap1 >> src1;
 
+//	findInRange(src0,dst0,hsv0,pts0, main_thresh);
+//	findInRange(src1,dst1,hsv1,pts1, main_thresh);
+	findCircle(src0,dst0);
+
+	imshow("Display Image 0", src0);
+	imshow("Filtered Image 0", dst0);
+//	imshow("Display Image 1", src1);
+//	imshow("Filtered Image 1", dst1);
+
+	//close program when escape key is pressed
+	int key = waitKey(1);
+	if (key == 27) break;
+	}
+
+	return 0;
+}
+
+void findInRange(Mat & src,Mat & dst,Mat & hsv, deque<Point> pts, Threshold main_thresh)
+{
 	if ( !src.data )
 	{
 			printf("No image data \n");
-			return -1;
+			return;
 	}
 
 	//convert source image to HSV colorspace
@@ -88,41 +111,60 @@ int main(int argc, char** argv)
 	findContours(dst.clone(), cnts, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
 	if (cnts.size() > 0)
 	{
+			//find the contour with max area
+			Mat c = cnts[0];
 			for(int i = 0; i < cnts.size(); i++)
 			{
-					Point2f xy;
-					float radius;
-					Mat c = cnts[i];
-					minEnclosingCircle(c, xy, radius);
-					Moments M = moments(c);
-					Point center = cvPoint(int(M.m10/M.m00), int(M.m01/M.m00));
-					if (radius > 10)
+					if (contourArea(c) < contourArea(cnts[i]))
 					{
-							circle(src, xy, int(radius), Scalar(0,255,255), 2);
-							circle(src, center, 5, Scalar(0,0,255), -1);
+							c = cnts[i];
 					}
-					if(pts.size() == veclen)
-						pts.pop_front();
+			}
+
+			Point2f xy;
+			float radius;
+
+			//find the minimum enclosing circle around that contour
+			minEnclosingCircle(c, xy, radius);
+			//place the center at the centroid of the contour
+			Moments M = moments(c);
+			Point center = cvPoint(int(M.m10/M.m00), int(M.m01/M.m00));
+			//draw the enclosing circle and centroid
+			if (radius > 10)
+			{
+					circle(src, xy, int(radius), Scalar(0,255,255), 2);
+					circle(src, center, 5, Scalar(0,0,255), -1);
 					pts.push_back(center);
 			}
+			if(pts.size() == VECLEN)
+				pts.pop_front();
 	}
-	for (int i = 0; i < pts.size(); i++)
+	//draw history trail
+	for (int i = 1; i < pts.size(); i++)
 	{
-			int thickness = int(sqrt(veclen/ float(i+1)) * 2.5);
+			int thickness = int(sqrt(VECLEN/ float(i+1)) * 2.5);
 			if(pts.size()>1)
 			{
-			line(src, pts.back(), pts[pts.size()-2], Scalar(0,0,255), thickness);
+			line(src, pts[i], pts[i-1], Scalar(0,0,255), thickness);
 			}
 	}
-	
 
-	imshow("Display Image", src);
-	imshow("Filtered IMage", dst);
+}
 
-	//close program when escape key is pressed
-	int key = waitKey(1);
-	if (key == 27) break;
-	}
-
-	return 0;
+void findCircle(Mat & src, Mat & gray)
+{
+    cvtColor(src, gray, COLOR_BGR2GRAY);
+    medianBlur(gray, gray, 5);
+    vector<Vec3f> circles;
+    HoughCircles(gray, circles, HOUGH_GRADIENT, 1,
+                 gray.rows/16, // change this value to detect circles with different distances to each other
+                 100, 30, 1, 1000 // change the last two parameters
+                                // (min_radius & max_radius) to detect larger circles
+                 );
+    for( size_t i = 0; i < circles.size(); i++ )
+    {
+        Vec3i c = circles[i];
+        circle( src, Point(c[0], c[1]), c[2], Scalar(0,0,255), 3, LINE_AA);
+        circle( src, Point(c[0], c[1]), 2, Scalar(0,255,0), 3, LINE_AA);
+    }
 }

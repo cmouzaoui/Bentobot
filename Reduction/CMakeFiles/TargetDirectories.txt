@@ -1,3 +1,0 @@
-/home/comrade/Docs/Homework/MAE162D/OpenCV/Reduction/CMakeFiles/rebuild_cache.dir
-/home/comrade/Docs/Homework/MAE162D/OpenCV/Reduction/CMakeFiles/edit_cache.dir
-/home/comrade/Docs/Homework/MAE162D/OpenCV/Reduction/CMakeFiles/Reduce.dir

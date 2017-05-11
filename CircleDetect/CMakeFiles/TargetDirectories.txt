@@ -1,3 +1,0 @@
-/home/comrade/Docs/Homework/MAE162D/OpenCV/CircleDetect/CMakeFiles/rebuild_cache.dir
-/home/comrade/Docs/Homework/MAE162D/OpenCV/CircleDetect/CMakeFiles/edit_cache.dir
-/home/comrade/Docs/Homework/MAE162D/OpenCV/CircleDetect/CMakeFiles/CircleDetect.dir

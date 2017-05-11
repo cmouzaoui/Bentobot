@@ -1,3 +1,0 @@
-/home/comrade/Docs/Homework/MAE162D/OpenCV/DisplayImage/CMakeFiles/rebuild_cache.dir
-/home/comrade/Docs/Homework/MAE162D/OpenCV/DisplayImage/CMakeFiles/edit_cache.dir
-/home/comrade/Docs/Homework/MAE162D/OpenCV/DisplayImage/CMakeFiles/DisplayImage.dir

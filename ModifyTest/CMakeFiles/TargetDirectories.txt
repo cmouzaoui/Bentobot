@@ -1,3 +1,0 @@
-/home/comrade/Docs/Homework/MAE162D/OpenCV/ModifyTest/CMakeFiles/rebuild_cache.dir
-/home/comrade/Docs/Homework/MAE162D/OpenCV/ModifyTest/CMakeFiles/edit_cache.dir
-/home/comrade/Docs/Homework/MAE162D/OpenCV/ModifyTest/CMakeFiles/ModifyImage.dir

@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 2.8)
+project( Calibrate )
+find_package( OpenCV REQUIRED)
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+add_executable( Calibrate Calibrate.cpp)
+add_executable( Calibrate_sample calibration.cpp )
+add_executable( triangulate triangulate.cpp )
+
+target_link_libraries( Calibrate ${OpenCV_LIBS})
+target_link_libraries( Calibrate_sample ${OpenCV_LIBS} )
+target_link_libraries( triangulate ${OpenCV_LIBS} )

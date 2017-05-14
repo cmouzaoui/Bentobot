@@ -3,6 +3,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/videoio.hpp>
 #include <opencv2/calib3d.hpp>
+#include <vector>
 #include <iostream>
 #include <string>
 #include <time.h>
@@ -19,8 +20,9 @@ const string camera_name_2 = "../logitech.yml";
 
 const int width = 7;
 const int height = 7;
-const float squareSize = 1;
-const int nImages = 10;
+const float squareSize = 0.024;
+
+const int nImages = 3;
 enum {DETECTION, CAPTURING, RECTIFIED, TRIANGULATING};
 const int delay = 1000;
 const Size patternsize(width,height);
@@ -28,7 +30,7 @@ const Size patternsize(width,height);
 const int threshold_slider_max = 255;
 const int threshold_slider_min = 0;
 
-bool getcorners(Mat& src1, vector<vector<Point2f> >& imagepoints2);
+bool getcorners(Mat& src1, vector<Point2f>& imagepoints2);
 void getball(Mat& src1, Point2f& point2, Threshold main_thresh);
 void printtext(Mat& src, int captured);
 
@@ -39,10 +41,10 @@ vector<vector<Point3f> > calcCorners()
     for( int i = 0; i < nImages; i++ )
     {
 
-    for( int i = 0; i < height; i++ )
-        for( int j = 0; j < width; j++ )
-            corners[i].push_back(Point3f(float(j*squareSize),
-                        float(i*squareSize), 0));
+    for( int j = 0; j < height; j++ )
+        for( int k = 0; k < width; k++ )
+            corners[i].push_back(Point3f(float(k*squareSize),
+                        float(j*squareSize), 0));
     }
     return corners;
 
@@ -53,7 +55,7 @@ class CameraPair
     public:
         CameraPair();
         void rectify(vector<vector<Point2f> >& imagepoints1,
-                vector<vector<Point2f> >& imagepoints2, Size imgsize1, Size imgsize2);
+                vector<vector<Point2f> >& imagepoints2, Size imgsize);
         Point3f triangulate(Point2f point1, Point2f point2);
     private:
         //obtained from sample calibration program Calibration_sample
@@ -90,35 +92,42 @@ CameraPair::CameraPair()
 }
 
 void CameraPair::rectify(vector<vector<Point2f> >& imagepoints1,
-        vector<vector<Point2f> >& imagepoints2, Size imgsize1, Size imgsize2)
+        vector<vector<Point2f> >& imagepoints2, Size imgsize)
 {
     vector<vector<Point3f> > objectPoints = calcCorners();
     stereoCalibrate(objectPoints, imagepoints1, imagepoints2,
-            m_camMat1, m_dist1, m_camMat2, m_dist2, imgsize1,
+            m_camMat1, m_dist1, m_camMat2, m_dist2, imgsize,
             m_r, m_t, m_e, m_f);
     //Debug output
-    cerr << "Rotation Matrix:" << endl << m_r << endl;
-    cerr << "Translation Matrix:" << endl << m_t << endl;
-    cerr << "Essential Matrix:" << endl << m_e << endl;
-    cerr << "Fundamental Matrix:" << endl << m_f << endl;
+    cout << "Rotation Matrix:" << endl << m_r << endl;
+    cout << "Translation Matrix:" << endl << m_t << endl;
+    cout << "Essential Matrix:" << endl << m_e << endl;
+    cout << "Fundamental Matrix:" << endl << m_f << endl;
 
-    stereoRectify(m_camMat1, m_dist1, m_camMat2, m_dist2, imgsize2,
+    stereoRectify(m_camMat1, m_dist1, m_camMat2, m_dist2, imgsize,
             m_r, m_t, m_r1, m_r2, m_proj1, m_proj2, m_Q);
+    cout << "Projection Marix 1:" << endl << m_proj1 << endl;
+    cout << "Projection Matrix 2:" << endl << m_proj2 << endl;
+
 }
 
 Point3f CameraPair::triangulate(Point2f point1, Point2f point2)
 {
-    vector<Mat> homocoord(1); //reconstructed point in homogenous coordinates
-    vector<Point3f> euclcoord; //reconstructed point in euclidean coordinates
+    Mat homocoord; //reconstructed point in homogenous coordinates
+    vector<Point3f> euclcoord(1); //reconstructed point in euclidean coordinates
     vector<Point2f> points1(1);
     vector<Point2f> points2(1);
     points1[0] = point1;
     points2[0] = point2;
+    cout << "Point 1: " << point1 << endl;
+    cout << "Point 2: " << point2 << endl;
     triangulatePoints(m_proj1, m_proj2, points1, points2, homocoord);
-    convertPointsFromHomogeneous(homocoord, euclcoord);
-    cerr << euclcoord[0];
+    cout << "Homogeneous Coords: " << homocoord.t() << endl;
+    convertPointsFromHomogeneous(homocoord.t(), euclcoord);
+    cout << "Euclidean Coords: " << euclcoord[0] << endl;
     return euclcoord[0];
 }
+
 int main(/*int argc, char** argv*/)
 {
     // Initialize Videocapture
@@ -128,10 +137,8 @@ int main(/*int argc, char** argv*/)
     Mat src0, src1;
     CameraPair camerapair;
 
-    //create instance of threshold
-    Threshold main_thresh = orange;
-
     //create window for trackbar
+    /*
     namedWindow("Threshold", 1);
 
     createTrackbar("H min", "Threshold",&main_thresh.min[0],threshold_slider_max);
@@ -140,13 +147,12 @@ int main(/*int argc, char** argv*/)
     createTrackbar("H max", "Threshold",&main_thresh.max[0],threshold_slider_max);  
     createTrackbar("S max", "Threshold",&main_thresh.max[1],threshold_slider_max);  
     createTrackbar("V max", "Threshold",&main_thresh.max[2],threshold_slider_max);  
+    */
 
     char c;
     int captured = 0;
     vector<vector<Point2f> > points1;
-    points1.resize(nImages);
     vector<vector<Point2f> > points2;
-    points2.resize(nImages);
     Point2f point1;
     Point2f point2;
     clock_t prevtimestamp = 0;
@@ -167,19 +173,22 @@ int main(/*int argc, char** argv*/)
 
         cap0 >> src0;
         cap1 >> src1;
+        resize(src1,src1, src0.size());
 
         if (mode == CAPTURING && clock() - prevtimestamp > delay*1e-3*CLOCKS_PER_SEC)
         {
-            if(getcorners(src0,points1)&& getcorners(src1,points2))
+            vector<Point2f> corners1, corners2;
+            if(getcorners(src0,corners1)&& getcorners(src1,corners2))
             {
+                points1.push_back(corners1);
+                points2.push_back(corners2);
                 prevtimestamp = clock();
                 captured++;
                 blink = true;
                 if (captured >= nImages)
                 {
                     mode = RECTIFIED;
-                    camerapair.rectify(points1, points2,src0.size(),
-                            src1.size());
+                    camerapair.rectify(points1, points2,src0.size());
                 }
             }
         }
@@ -192,8 +201,8 @@ int main(/*int argc, char** argv*/)
 
         if (mode == RECTIFIED)
         {
-            getball(src0, point1, main_thresh);
-            getball(src1, point2, main_thresh);
+            getball(src0, point1, ORANGE1);
+            getball(src1, point2, ORANGE2);
             if (c == 't')
                 camerapair.triangulate(point1, point2);
         }
@@ -209,21 +218,19 @@ int main(/*int argc, char** argv*/)
 
 
 
-bool getcorners(Mat& src,  vector<vector<Point2f> >& points)
+bool getcorners(Mat& src, vector<Point2f> & corners) 
 {
     Mat gray;
     cvtColor(src,gray, COLOR_BGR2GRAY);
-    vector<Point2f> corners;
 
     bool patternfound = findChessboardCorners(gray,patternsize,corners,
-            CV_CALIB_CB_NORMALIZE_IMAGE+CV_CALIB_CB_FILTER_QUADS+CALIB_CB_FAST_CHECK);
+            CV_CALIB_CB_ADAPTIVE_THRESH+CV_CALIB_CB_NORMALIZE_IMAGE+CV_CALIB_CB_FILTER_QUADS+CALIB_CB_FAST_CHECK);
     if(patternfound)
     {
         cout << "found a chessboard pattern!" << endl;
         cornerSubPix(gray, corners, Size(11,11), Size(-1,-1),
                 TermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER,30,0.1));
         drawChessboardCorners(src, patternsize, Mat(corners), patternfound);
-        points.push_back(corners);
     }
     return patternfound;
 }

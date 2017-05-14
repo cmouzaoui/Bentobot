@@ -62,15 +62,15 @@ int main(int argc, char** argv)
     //begin loop
     while(true)
     {
-        cap0 >> src0;
+    //    cap0 >> src0;
         cap1 >> src1;
 
         //	findInRange(src0,dst0,hsv0,pts0, main_thresh);
-        //	findInRange(src1,dst1,hsv1,pts1, main_thresh);
-        findCircle(src0,dst0);
+        	findInRange(src1,dst1,hsv1,pts1, main_thresh);
+        //findCircle(src1,dst1);
 
-        imshow("Display Image 0", src0);
-        imshow("Filtered Image 0", dst0);
+        imshow("Display Image 0", src1);
+        imshow("Filtered Image 0", dst1);
         //	imshow("Display Image 1", src1);
         //	imshow("Filtered Image 1", dst1);
 

@@ -63,8 +63,7 @@ void anglesdemo(char * command)
 
 void cartToPolar(float x, float y, float z, float& phi, float& theta)
 {
-    float r1 = 240, r2 = 24.5, r3, phi_o = 48.76, a, b;
-
+    float a, b, dx = 126.748, dz = 335.61, g = 9807, v = 4886.626; // all in mm
     if (x == 0)
     {
         theta = 0;
@@ -80,11 +79,13 @@ void cartToPolar(float x, float y, float z, float& phi, float& theta)
     }
     else
     {
-        r3 = sqrt(pow(x,2) + pow(y,2) + pow(z-r1,2) -pow(r2,2));
-        a = atan(r2/r3);
-        b = atan((z-r1)/(sqrt(pow(x,2) + pow(y,2))));
-        phi = b - a;
+    a = pow(v, 2) - sqrt(pow(v, 4) - g*(g*pow(x-dx, 2) + 2*(z-dz)*pow(v, 2))); // + or - for first sign?
+    b = g*(x-dx);
+    phi = atan(a/b);
     }
+    
+    cout << "Phi: " << phi << endl;
+    cout << "Theta: " << theta << endl;
 
     theta = theta*180/(M_PI);
     phi = phi*180/(M_PI);

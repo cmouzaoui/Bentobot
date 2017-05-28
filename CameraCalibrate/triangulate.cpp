@@ -30,7 +30,6 @@ const Size patternsize(width,height);
 const int threshold_slider_max = 255;
 const int threshold_slider_min = 0;
 
-bool getcorners(Mat& src1, vector<Point2f>& imagepoints2);
 void getball(Mat& src1, Point2f& point2, Threshold main_thresh);
 void printtext(Mat& src, int captured);
 
@@ -43,6 +42,7 @@ class CameraPair
         void rectify(vector<vector<Point2f> >& imagepoints1,
                 vector<vector<Point2f> >& imagepoints2, Size imgsize);
         Point3f triangulate(Point2f point1, Point2f point2);
+        bool getcorners(Mat& src1, Mat &src2);
     private:
         //obtained from sample calibration program Calibration_sample
         Mat m_camMat1; //intrinsic parameters of camera 1
@@ -63,7 +63,11 @@ class CameraPair
         Mat m_r2; //rotation matrix for camera 2
         Mat m_Q; //disparity-to-depth mapping matrix
         //for rectify()
-        CameraPair::vector<vector<Point3f> > calcCorners();
+        
+        //storing image points
+        vector<vector<Point3f> > m_imagePoints1; 
+        vector<vector<Point3f> > m_imagePoints2; 
+        vector<vector<Point3f> > calcCorners();
 };
 
 CameraPair::CameraPair()
@@ -116,7 +120,7 @@ Point3f CameraPair::triangulate(Point2f point1, Point2f point2)
     return euclcoord[0];
 }
 
-CameraPair::vector<vector<Point3f> > calcCorners()
+vector<vector<Point3f> > CameraPair::calcCorners()
 {
     vector<vector<Point3f> > corners;
     corners.resize(nImages);
@@ -222,7 +226,17 @@ int main(/*int argc, char** argv*/)
 
 
 
-bool getcorners(Mat& src, vector<Point2f> & corners) 
+bool CameraPair::getcorners(Mat& src1, Mat &src2)
+{
+    vector<Point3f> points1, points2;
+    if (getcorners_aux(src1, points1) && getcorners_aux(src2, points2))
+    {
+        m_imagePoints1.push_back(points1);
+        m_imagePoints2.push_back(points2);
+    }
+}
+
+bool CameraPair::getcorners_aux(Mat& src1, vector<Point3f> & corners)
 {
     Mat gray;
     cvtColor(src,gray, COLOR_BGR2GRAY);

@@ -4,8 +4,18 @@ find_package( OpenCV REQUIRED)
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 add_executable( Calibrate Calibrate.cpp)
 add_executable( Calibrate_sample calibration.cpp )
-add_executable( triangulate triangulate.cpp )
-
 target_link_libraries( Calibrate ${OpenCV_LIBS})
 target_link_libraries( Calibrate_sample ${OpenCV_LIBS} )
-target_link_libraries( triangulate ${OpenCV_LIBS} )
+
+set(raspicam_DIR /usr/local/lib/cmake)
+find_package(raspicam)
+IF (raspicam_CV_FOUND)
+    MESSAGE(STATUS "COMPILING TRIANGULATION WITH RASPICAM")
+    add_executable( triangulate triangulate.cpp )
+    target_link_libraries(triangulate ${raspicam_CV_LIBS})
+    target_link_libraries( triangulate ${OpenCV_LIBS} )
+ELSE()
+    MESSAGE(WARNING "RASPICAM NOT FOUND IN YOUR SYSTEM. CANNOT COMPILE TRIANGULATION")
+ENDIF()
+
+

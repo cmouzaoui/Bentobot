@@ -26,15 +26,15 @@ int main()
 
 }
 
-void cartToPolar(float x, float y, float x, float& phi, float& theta)
+void cartToPolar(float x, float y, float z, float& phi, float& theta)
 {
-	float r1 = 218.7, r2 = 24.5, r3, phi_o = 48.76, a, b;
+	float a, b, dx = 126.748, dz = 335.61, g = 9807, v = 4886.626; // all in mm
 	
 	theta = -atan(y/x);
-	r3 = sqrt(x^2 + y^2 + (z-r1)^2 -r2^2);
-	a = atan(r2/r3);
-	b = atan((z-r1)/(srqt(x^2 + y^2));
-	phi = b - a;
+    
+    a = pow(v, 2) + sqrt(pow(v, 4) - g*(g*pow(x-dx, 2) + 2*(z-dz)*pow(v, 2))); // + or - for first sign?
+    b = g*(x-dx);
+    phi = atan(a/b);
 
 	cout << "Phi: " << phi << endl;
 	cout << "Theta: " << theta << endl;

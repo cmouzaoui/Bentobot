@@ -18,6 +18,7 @@ const int blue_max [3] = {127,180,189};
 
 const int threshold_slider_max = 255;
 const int threshold_slider_min = 0;
+const char * THRESH_FILE_DEFAULT = "threshold.yml";
 
 struct Threshold
 {
@@ -36,18 +37,38 @@ void findCircle(Mat & src, Mat& dst);
 
 int main(int argc, char** argv)
 {
+    int cameraID;
+    //load threshold file if it exists
+    Filestorage threshfile;
+    if (argc == 2)
+    {
+        cameraID = atoi(argv[1]);
+        thresh_file_name = sprintf("threshold_%d",cameraID);
+    }
+    else
+    {
+        thresh_file_name = THRESH_FILE_DEFAULT;
+        cameraID = 0;
+    }
+
+    if threshfile.open(thresh_file_name, FileStorage::READ);
+    {
+        threshfile["threshold"] >> main_thresh;
+    }
+    threshfile.release();
+
     // Initialize Videocapture
-    VideoCapture cap0(0);
     VideoCapture cap1(1);
 
-    Mat src0, dst0, hsv0;
-    deque<Point> pts0; 
+    //Mat src0, dst0, hsv0;
+    //deque<Point> pts0; 
 
     Mat src1, dst1, hsv1; 
     deque<Point> pts1;
 
     //create instance of threshold
     Threshold main_thresh = orange;
+
 
     //create window for trackbar
     namedWindow("Threshold", 1);
@@ -76,7 +97,11 @@ int main(int argc, char** argv)
 
         //close program when escape key is pressed
         int key = waitKey(1);
-        if (key == 27) break;
+        if (key == 27)
+        {
+            threshfile.open(thresh_file_name, FileStorage::WRITE);
+            break;
+        }
     }
 
     return 0;

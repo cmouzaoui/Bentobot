@@ -36,7 +36,7 @@ void cartToPolar(float x, float y, float z, float& phi, float& theta)
     b = g*(x-dx);
     phi = atan(a/b);
     
-	cout << "Phi: " << phi << endl;
-	cout << "Theta: " << theta << endl;
+    cout << "Phi: " << phi << endl;
+    cout << "Theta: " << theta << endl;
 
 }

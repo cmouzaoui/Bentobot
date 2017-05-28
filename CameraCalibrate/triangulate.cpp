@@ -34,21 +34,7 @@ bool getcorners(Mat& src1, vector<Point2f>& imagepoints2);
 void getball(Mat& src1, Point2f& point2, Threshold main_thresh);
 void printtext(Mat& src, int captured);
 
-vector<vector<Point3f> > calcCorners()
-{
-    vector<vector<Point3f> > corners;
-    corners.resize(nImages);
-    for( int i = 0; i < nImages; i++ )
-    {
 
-    for( int j = 0; j < height; j++ )
-        for( int k = 0; k < width; k++ )
-            corners[i].push_back(Point3f(float(k*squareSize),
-                        float(j*squareSize), 0));
-    }
-    return corners;
-
-}
 
 class CameraPair
 {
@@ -76,6 +62,8 @@ class CameraPair
         Mat m_r1; //rotation matrix for camera 1
         Mat m_r2; //rotation matrix for camera 2
         Mat m_Q; //disparity-to-depth mapping matrix
+        //for rectify()
+        CameraPair::vector<vector<Point3f> > calcCorners();
 };
 
 CameraPair::CameraPair()
@@ -128,6 +116,22 @@ Point3f CameraPair::triangulate(Point2f point1, Point2f point2)
     return euclcoord[0];
 }
 
+CameraPair::vector<vector<Point3f> > calcCorners()
+{
+    vector<vector<Point3f> > corners;
+    corners.resize(nImages);
+    for( int i = 0; i < nImages; i++ )
+    {
+
+    for( int j = 0; j < height; j++ )
+        for( int k = 0; k < width; k++ )
+            corners[i].push_back(Point3f(float(k*squareSize),
+                        float(j*squareSize), 0));
+    }
+    return corners;
+
+}
+
 int main(/*int argc, char** argv*/)
 {
     // Initialize Videocapture
@@ -178,7 +182,7 @@ int main(/*int argc, char** argv*/)
         if (mode == CAPTURING && clock() - prevtimestamp > delay*1e-3*CLOCKS_PER_SEC)
         {
             vector<Point2f> corners1, corners2;
-            if(getcorners(src0,corners1)&& getcorners(src1,corners2))
+            if(camerapair.getcorners(src0,src1))
             {
                 points1.push_back(corners1);
                 points2.push_back(corners2);
@@ -201,7 +205,7 @@ int main(/*int argc, char** argv*/)
 
         if (mode == RECTIFIED)
         {
-            getball(src0, point1, ORANGE1);
+            getball(src0, point1, ORANGE3);
             getball(src1, point2, ORANGE2);
             if (c == 't')
                 camerapair.triangulate(point1, point2);

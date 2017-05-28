@@ -17,4 +17,7 @@ const Threshold ORANGE1 = {.min = {9,26,228},
 const Threshold ORANGE2 = {.min = {11,231,36},
     .max ={23,255,255}};
 
+const Threshold ORANGE3 = {.min = {2,152,123},
+      .max = {19,255,255}};
+
 #endif

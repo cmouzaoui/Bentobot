@@ -321,7 +321,7 @@ int main( int argc, char** argv )
     cv::CommandLineParser parser(argc, argv,
         "{help ||}{w|7|}{h|7|}{pt|chessboard|}{n|10|}{d|1000|}{s|1|}{o|out_camera_data.yml|}"
         "{op||}{oe||}{zt||}{a|1|}{p||}{v||}{V||}{su||}"
-        "{@input_data|1|}");
+        "{@input_data|0|}");
     if (parser.has("help"))
     {
         help();

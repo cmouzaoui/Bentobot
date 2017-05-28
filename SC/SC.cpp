@@ -32,7 +32,7 @@ void cartToPolar(float x, float y, float z, float& phi, float& theta)
 	
     theta = -atan(y/x);
     
-    a = pow(v, 2) + sqrt(pow(v, 4) - g*(g*pow(x-dx, 2) + 2*(z-dz)*pow(v, 2))); // + or - for first sign?
+    a = pow(v, 2) - sqrt(pow(v, 4) - g*(g*pow(x-dx, 2) + 2*(z-dz)*pow(v, 2))); // + or - for first sign?
     b = g*(x-dx);
     phi = atan(a/b);
     

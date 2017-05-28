@@ -28,14 +28,14 @@ int main()
 
 void cartToPolar(float x, float y, float z, float& phi, float& theta)
 {
-	float a, b, dx = 126.748, dz = 335.61, g = 9807, v = 4886.626; // all in mm
+    float a, b, dx = 126.748, dz = 335.61, g = 9807, v = 4886.626; // all in mm
 	
-	theta = -atan(y/x);
+    theta = -atan(y/x);
     
     a = pow(v, 2) + sqrt(pow(v, 4) - g*(g*pow(x-dx, 2) + 2*(z-dz)*pow(v, 2))); // + or - for first sign?
     b = g*(x-dx);
     phi = atan(a/b);
-
+    
 	cout << "Phi: " << phi << endl;
 	cout << "Theta: " << theta << endl;
 

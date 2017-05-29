@@ -17,6 +17,8 @@ using namespace cv;
 //and their distortion coefficients
 const string camera_name_1 = "../comradey_internal.yml";
 const string camera_name_2 = "../logitech.yml";
+const string threshold_0 = "../threshold_0.yml";
+const string threshold_1 = "../threshold_1.yml";
 
 const int width = 7;
 const int height = 7;
@@ -138,24 +140,17 @@ vector<vector<Point3f> > CameraPair::calcCorners()
 
 int main(/*int argc, char** argv*/)
 {
+    //Load thresholds
+    Threshold orange0;
+    Threshold orange1;
+    FileStorage t0(threshold_0, FileStorage::READ);
+    FileStorage t1(threshold_1, FileStorage::READ);
     // Initialize Videocapture
     VideoCapture cap0(0);
     VideoCapture cap1(1);
 
     Mat src0, src1;
     CameraPair camerapair;
-
-    //create window for trackbar
-    /*
-    namedWindow("Threshold", 1);
-
-    createTrackbar("H min", "Threshold",&main_thresh.min[0],threshold_slider_max);
-    createTrackbar("S min", "Threshold",&main_thresh.min[1],threshold_slider_max);
-    createTrackbar("V min", "Threshold",&main_thresh.min[2],threshold_slider_max);
-    createTrackbar("H max", "Threshold",&main_thresh.max[0],threshold_slider_max);  
-    createTrackbar("S max", "Threshold",&main_thresh.max[1],threshold_slider_max);  
-    createTrackbar("V max", "Threshold",&main_thresh.max[2],threshold_slider_max);  
-    */
 
     char c;
     int captured = 0;

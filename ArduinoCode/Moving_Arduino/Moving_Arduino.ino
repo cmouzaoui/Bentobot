@@ -13,6 +13,9 @@ const int servoPin = 10; //yellow signal wire to pin 10
 float theta0 = -82, phi0 = 48.76;  //48.76 is when launcher is resting backwards, 3.88 is forward
 float theta_now = theta0;
 float phi_now = phi0;
+int theta_increment = 0; 
+int phi_increment = 0;
+
 const int microsteps_per_step = 32;
 const int time_per_step = 5000/microsteps_per_step;
  
@@ -56,37 +59,38 @@ void loop() {
   {
     Serial.println(main_string);
     int newline_index = main_string.indexOf('\n');
-    if (main_string == "s\n")
-    {
-      shoot();
-    }
-    else
-    {
+
     int comma_index = main_string.indexOf(',');
     Serial.print("Comma index: ");
     Serial.println(comma_index);
     float theta = main_string.substring(0,comma_index).toFloat();
     float phi = main_string.substring(comma_index+1).toFloat();
-    moveTo(theta,phi);
-    }
+    
+    //if (abs(theta_now - theta) < 1 && abs(phi_now - phi) < 1)  //if theta and phi are within 1 degree of target angles
+    if (main_string == "s\n")
+    {
+        shoot();
+    } 
+    else
+    {
+      if (theta_now - theta > 0.5)
+        theta_increment = -1;       //decrease theta if current position is too large
+      else if (theta_now - theta < -0.5)
+        theta_increment = 1;
+      else
+        theta_increment = 0;
+        
+      if (phi_now - phi > 0.5)
+        phi_increment = -1;
+      else if (phi_now - phi < -0.5)
+        phi_increment = 1;
+      else
+        phi_increment = 0;
+        
+      moveTo(theta + theta_increment, phi + phi_increment);
+    }  
     main_string = main_string.substring(newline_index+1);
   }
-    /*
-    Serial.print("enter");
-    float theta = Serial.parseFloat();  //theta value
-    float phi = Serial.parseFloat();  //phi value
-    Serial.print(", almost there: ");
-    //look for the newline
-    char c = Serial.read();
-    Serial.print(c);
-    if (c == '\n') {
-      moveTo(theta,phi);
-      Serial.print(theta); Serial.print(phi);      
-    }
-    else if (c == 's' && Serial.read()=='\n') {
-      shoot();
-    }
-    */
 }
 
 void move(float p1, float p2){

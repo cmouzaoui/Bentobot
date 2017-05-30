@@ -1,9 +1,12 @@
 #include <stdio.h>
+#include <iostream>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/videoio.hpp>
 #include <deque>
 #include <cmath>
+#include <string>
+#include <raspicam/raspicam_cv.h>
 
 using namespace std;
 using namespace cv;
@@ -19,6 +22,7 @@ const int blue_max [3] = {127,180,189};
 const int threshold_slider_max = 255;
 const int threshold_slider_min = 0;
 const char * THRESH_FILE_DEFAULT = "threshold.yml";
+const int BUFLEN = 50;
 
 struct Threshold
 {
@@ -39,26 +43,51 @@ int main(int argc, char** argv)
 {
     int cameraID;
     //load threshold file if it exists
-    Filestorage threshfile;
-    if (argc == 2)
+    FileStorage threshfile;
+    char thresh_file_name[BUFLEN];
+    //create instance of threshold
+    Threshold main_thresh = orange;
+
+   if (argc == 2)
     {
         cameraID = atoi(argv[1]);
-        thresh_file_name = sprintf("threshold_%d",cameraID);
     }
     else
     {
-        thresh_file_name = THRESH_FILE_DEFAULT;
+        strcpy(thresh_file_name,THRESH_FILE_DEFAULT);
         cameraID = 0;
     }
 
-    if threshfile.open(thresh_file_name, FileStorage::READ);
+        sprintf(thresh_file_name,"threshold_%d.yml",cameraID);
+
+    if (threshfile.open(thresh_file_name, FileStorage::READ))
     {
-        threshfile["threshold"] >> main_thresh;
+        threshfile["min1"] >> main_thresh.min[0];
+        threshfile["min2"] >> main_thresh.min[1];
+        threshfile["min3"] >> main_thresh.min[2];
+        threshfile["max1"] >> main_thresh.max[0];
+        threshfile["max2"] >> main_thresh.max[1];
+        threshfile["max3"] >> main_thresh.max[2];
     }
     threshfile.release();
 
     // Initialize Videocapture
-    VideoCapture cap1(1);
+    raspicam::RaspiCam_Cv Camera;
+    VideoCapture cap1;
+    if(cameraID == 0)
+    {
+    cap1.open(0);
+    }
+    else if (cameraID == 1)
+    {
+        //set camera params
+//        Camera.set( CV_CAP_PROP_FORMAT, CV_8UC1 );
+    Camera.set ( CV_CAP_PROP_FRAME_WIDTH, 640);
+    Camera.set ( CV_CAP_PROP_FRAME_HEIGHT, 480);
+        //Open camera
+        cout<<"Opening Camera..."<<endl;
+        if (!Camera.open()) {cerr<<"Error opening the camera"<<endl;return -1;}
+    }
 
     //Mat src0, dst0, hsv0;
     //deque<Point> pts0; 
@@ -66,8 +95,6 @@ int main(int argc, char** argv)
     Mat src1, dst1, hsv1; 
     deque<Point> pts1;
 
-    //create instance of threshold
-    Threshold main_thresh = orange;
 
 
     //create window for trackbar
@@ -84,8 +111,16 @@ int main(int argc, char** argv)
     while(true)
     {
     //    cap0 >> src0;
-        cap1 >> src1;
-
+        if (cameraID == 0)
+        {
+            cap1 >> src1;
+        }
+        else if (cameraID == 1)
+        {
+            Camera.grab();
+            Camera.retrieve (src1);
+        }
+ 
         //	findInRange(src0,dst0,hsv0,pts0, main_thresh);
         	findInRange(src1,dst1,hsv1,pts1, main_thresh);
         //findCircle(src1,dst1);
@@ -100,6 +135,13 @@ int main(int argc, char** argv)
         if (key == 27)
         {
             threshfile.open(thresh_file_name, FileStorage::WRITE);
+            threshfile << "min1" << main_thresh.min[0];
+            threshfile << "min2" << main_thresh.min[1];
+            threshfile << "min3" << main_thresh.min[2];
+            threshfile << "max1" << main_thresh.max[0];
+            threshfile << "max2" << main_thresh.max[1];
+            threshfile << "max3" << main_thresh.max[2];
+            threshfile.release();
             break;
         }
     }

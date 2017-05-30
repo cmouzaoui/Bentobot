@@ -79,11 +79,12 @@ void cartToPolar(float x, float y, float z, float& phi, float& theta)
     }
     else
     {
-    a = pow(v, 2) - sqrt(pow(v, 4) - g*(g*pow(x-dx, 2) + 2*(z-dz)*pow(v, 2))); // + or - for first sign?
-    b = g*(x-dx);
-    phi = atan(a/b);
+        x = sqrt(pow(x,2) + pow(y,2));
+        a = pow(v, 2) - sqrt(pow(v, 4) - g*(g*pow(x-dx, 2) + 2*(z-dz)*pow(v, 2))); // + or - for first sign?
+        b = g*(x-dx);
+        phi = atan(a/b);
     }
-    
+
     cout << "Phi: " << phi << endl;
     cout << "Theta: " << theta << endl;
 

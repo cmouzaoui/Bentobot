@@ -7,6 +7,7 @@
 #include <iostream>
 #include <string>
 #include <time.h>
+#include <raspicam/raspicam_cv.h>
 
 #include "threshold.h"
 
@@ -17,8 +18,9 @@ using namespace cv;
 //and their distortion coefficients
 const string camera_name_1 = "../comradey_internal.yml";
 const string camera_name_2 = "../logitech.yml";
-const string threshold_0 = "../threshold_0.yml";
-const string threshold_1 = "../threshold_1.yml";
+const string threshold_name_0 = "../threshold_0.yml";
+const string threshold_name_1 = "../threshold_1.yml";
+const string camerapair_file_name = "../camerapair.yml";
 
 const int width = 7;
 const int height = 7;
@@ -34,6 +36,7 @@ const int threshold_slider_min = 0;
 
 void getball(Mat& src1, Point2f& point2, Threshold main_thresh);
 void printtext(Mat& src, int captured);
+void thresh_load(FileStorage fs, Threshold& t);
 
 
 
@@ -41,10 +44,11 @@ class CameraPair
 {
     public:
         CameraPair();
-        void rectify(vector<vector<Point2f> >& imagepoints1,
-                vector<vector<Point2f> >& imagepoints2, Size imgsize);
+        void rectify(Size imgsize);
         Point3f triangulate(Point2f point1, Point2f point2);
         bool getcorners(Mat& src1, Mat &src2);
+        void save();
+        bool rectified() {return m_rectified;}
     private:
         //obtained from sample calibration program Calibration_sample
         Mat m_camMat1; //intrinsic parameters of camera 1
@@ -67,29 +71,60 @@ class CameraPair
         //for rectify()
         
         //storing image points
-        vector<vector<Point3f> > m_imagePoints1; 
-        vector<vector<Point3f> > m_imagePoints2; 
+        vector<vector<Point2f> > m_imagePoints1; 
+        vector<vector<Point2f> > m_imagePoints2; 
         vector<vector<Point3f> > calcCorners();
+
+        bool getcorners_aux(Mat& src1, vector<Point2f> & corners);
+        bool m_rectified;
 };
 
 CameraPair::CameraPair()
 {
     FileStorage c1(camera_name_1, FileStorage::READ);
     FileStorage c2(camera_name_2, FileStorage::READ);
+    FileStorage c3;
+    if (c3.open(camerapair_file_name, FileStorage::READ))
+    {
+        c3["m_r"] >> m_r;
+        c3["m_t"] >> m_t;
+        c3["m_e"] >> m_e;
+        c3["m_f"] >> m_f;
+        c3["m_proj1"] >> m_proj1;
+        c3["m_proj2"] >> m_proj2;
+        c3["m_r1"] >> m_r1;
+        c3["m_r2"] >> m_r2;
+        m_rectified = true;
+        c3.release();
+    }
     c1["camera_matrix"] >> m_camMat1;
     c2["camera_matrix"] >> m_camMat2;
     c1["distortion_coefficients"] >> m_dist1;
     c2["distortion_coefficients"] >> m_dist2;
     c1.release();
     c2.release();
+    m_rectified = false;
 
 }
 
-void CameraPair::rectify(vector<vector<Point2f> >& imagepoints1,
-        vector<vector<Point2f> >& imagepoints2, Size imgsize)
+void CameraPair::save()
+{
+    FileStorage c(camerapair_file_name, FileStorage::WRITE);
+     c << "m_t" << m_t;
+     c << "m_r" << m_r;
+     c << "m_e" << m_e;
+     c << "m_f" << m_f;
+     c << "m_proj1" << m_proj1;
+     c << "m_proj2" << m_proj2;
+     c << "m_r1" << m_r1;
+     c << "m_r2" << m_r2;
+     c.release();
+}
+
+void CameraPair::rectify(Size imgsize)
 {
     vector<vector<Point3f> > objectPoints = calcCorners();
-    stereoCalibrate(objectPoints, imagepoints1, imagepoints2,
+    stereoCalibrate(objectPoints, m_imagePoints1, m_imagePoints2,
             m_camMat1, m_dist1, m_camMat2, m_dist2, imgsize,
             m_r, m_t, m_e, m_f);
     //Debug output
@@ -143,11 +178,20 @@ int main(/*int argc, char** argv*/)
     //Load thresholds
     Threshold orange0;
     Threshold orange1;
-    FileStorage t0(threshold_0, FileStorage::READ);
-    FileStorage t1(threshold_1, FileStorage::READ);
+    FileStorage t0(threshold_name_0, FileStorage::READ);
+    FileStorage t1(threshold_name_1, FileStorage::READ);
+    thresh_load(t0,orange0);
+    thresh_load(t1,orange1);
+    t0.release();
+    t1.release();
     // Initialize Videocapture
     VideoCapture cap0(0);
-    VideoCapture cap1(1);
+    raspicam::RaspiCam_Cv cap1;
+    cap1.set ( CV_CAP_PROP_FRAME_WIDTH, 640);
+    cap1.set ( CV_CAP_PROP_FRAME_HEIGHT, 480);
+    cout<<"Opening cap1..."<<endl;
+    if (!cap1.open()) {cerr<<"Error opening the camera"<<endl;return -1;}
+
 
     Mat src0, src1;
     CameraPair camerapair;
@@ -160,7 +204,7 @@ int main(/*int argc, char** argv*/)
     Point2f point2;
     clock_t prevtimestamp = 0;
     bool found = false;
-    int mode = DETECTION;
+    int mode = camerapair.calibrated() ? RECTIFIED : DETECTION;
     bool blink = false;
 
     while(true)
@@ -175,23 +219,22 @@ int main(/*int argc, char** argv*/)
         }
 
         cap0 >> src0;
-        cap1 >> src1;
+        cap1.grab();
+        cap1.retrieve (src1);
+
         resize(src1,src1, src0.size());
 
         if (mode == CAPTURING && clock() - prevtimestamp > delay*1e-3*CLOCKS_PER_SEC)
         {
-            vector<Point2f> corners1, corners2;
             if(camerapair.getcorners(src0,src1))
             {
-                points1.push_back(corners1);
-                points2.push_back(corners2);
                 prevtimestamp = clock();
                 captured++;
                 blink = true;
                 if (captured >= nImages)
                 {
                     mode = RECTIFIED;
-                    camerapair.rectify(points1, points2,src0.size());
+                    camerapair.rectify(src0.size());
                 }
             }
         }
@@ -204,8 +247,8 @@ int main(/*int argc, char** argv*/)
 
         if (mode == RECTIFIED)
         {
-            getball(src0, point1, ORANGE3);
-            getball(src1, point2, ORANGE2);
+            getball(src0, point1, orange0);
+            getball(src1, point2, orange1);
             if (c == 't')
                 camerapair.triangulate(point1, point2);
         }
@@ -213,7 +256,11 @@ int main(/*int argc, char** argv*/)
         printtext(src0, captured);
         imshow("Video Feed 0", src0);
         imshow("Video Feed 1", src1);
-        if (c == 27) break;
+        if (c == 27) 
+        {
+            camerapair.save();
+            break;
+        }
     }
 
     return 0;
@@ -223,18 +270,20 @@ int main(/*int argc, char** argv*/)
 
 bool CameraPair::getcorners(Mat& src1, Mat &src2)
 {
-    vector<Point3f> points1, points2;
+    vector<Point2f> points1, points2;
     if (getcorners_aux(src1, points1) && getcorners_aux(src2, points2))
     {
         m_imagePoints1.push_back(points1);
         m_imagePoints2.push_back(points2);
+        return true;
     }
+    return false;
 }
 
-bool CameraPair::getcorners_aux(Mat& src1, vector<Point3f> & corners)
+bool CameraPair::getcorners_aux(Mat& src1, vector<Point2f> & corners)
 {
     Mat gray;
-    cvtColor(src,gray, COLOR_BGR2GRAY);
+    cvtColor(src1,gray, COLOR_BGR2GRAY);
 
     bool patternfound = findChessboardCorners(gray,patternsize,corners,
             CV_CALIB_CB_ADAPTIVE_THRESH+CV_CALIB_CB_NORMALIZE_IMAGE+CV_CALIB_CB_FILTER_QUADS+CALIB_CB_FAST_CHECK);
@@ -243,7 +292,7 @@ bool CameraPair::getcorners_aux(Mat& src1, vector<Point3f> & corners)
         cout << "found a chessboard pattern!" << endl;
         cornerSubPix(gray, corners, Size(11,11), Size(-1,-1),
                 TermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER,30,0.1));
-        drawChessboardCorners(src, patternsize, Mat(corners), patternfound);
+        drawChessboardCorners(src1, patternsize, Mat(corners), patternfound);
     }
     return patternfound;
 }
@@ -311,4 +360,16 @@ void printtext(Mat& src, int captured)
 
         putText( src, msg, textOrigin, 1, 1,
                  Scalar(0,0,255));
+}
+
+
+void thresh_load(FileStorage fs, Threshold& t)
+{
+    fs["min1"] >> t.min[0];
+    fs["min2"] >> t.min[1];
+    fs["min3"] >> t.min[2];
+    fs["max1"] >> t.max[0];
+    fs["max2"] >> t.max[1];
+    fs["max3"] >> t.max[2];
+
 }

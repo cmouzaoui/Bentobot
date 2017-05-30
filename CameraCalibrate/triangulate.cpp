@@ -28,6 +28,7 @@ const float squareSize = 0.024;
 
 const int nImages = 3;
 enum {DETECTION, CAPTURING, RECTIFIED, TRIANGULATING};
+const string mode_string[] = {"DETECTION","CAPTURING","RECTIFIED","TRIANGULATING"};
 const int delay = 1000;
 const Size patternsize(width,height);
 
@@ -35,7 +36,7 @@ const int threshold_slider_max = 255;
 const int threshold_slider_min = 0;
 
 void getball(Mat& src1, Point2f& point2, Threshold main_thresh);
-void printtext(Mat& src, int captured);
+void printtext(Mat& src, string msg);
 void thresh_load(FileStorage fs, Threshold& t);
 
 
@@ -86,6 +87,7 @@ CameraPair::CameraPair()
     FileStorage c3;
     if (c3.open(camerapair_file_name, FileStorage::READ))
     {
+        cout << "Loading rectification data from " << camerapair_file_name << endl;
         c3["m_r"] >> m_r;
         c3["m_t"] >> m_t;
         c3["m_e"] >> m_e;
@@ -97,14 +99,16 @@ CameraPair::CameraPair()
         m_rectified = true;
         c3.release();
     }
+    else
+    {
+        m_rectified = false;
+    }
     c1["camera_matrix"] >> m_camMat1;
     c2["camera_matrix"] >> m_camMat2;
     c1["distortion_coefficients"] >> m_dist1;
     c2["distortion_coefficients"] >> m_dist2;
     c1.release();
     c2.release();
-    m_rectified = false;
-
 }
 
 void CameraPair::save()
@@ -204,8 +208,10 @@ int main(/*int argc, char** argv*/)
     Point2f point2;
     clock_t prevtimestamp = 0;
     bool found = false;
-    int mode = camerapair.calibrated() ? RECTIFIED : DETECTION;
+    int mode = camerapair.rectified() ? RECTIFIED : DETECTION;
     bool blink = false;
+    string msg;
+    Point3f current_point;
 
     while(true)
     {
@@ -237,6 +243,8 @@ int main(/*int argc, char** argv*/)
                     camerapair.rectify(src0.size());
                 }
             }
+
+        msg = format("%d/%d ", captured, nImages);
         }
 
         if( blink )
@@ -250,16 +258,24 @@ int main(/*int argc, char** argv*/)
             getball(src0, point1, orange0);
             getball(src1, point2, orange1);
             if (c == 't')
-                camerapair.triangulate(point1, point2);
+            {
+                current_point = camerapair.triangulate(point1, point2);
+                msg = format("%0.3f,%0.3f,%0.3f",current_point.x,
+                        current_point.y, current_point.z);
+            }
         }
 
-        printtext(src0, captured);
+        printtext(src0, msg);
         imshow("Video Feed 0", src0);
         imshow("Video Feed 1", src1);
         if (c == 27) 
         {
             camerapair.save();
             break;
+        }
+        if (c == 'm')
+        {
+            cout << "Camera Mode is : " << mode_string[mode] << endl;
         }
     }
 
@@ -351,9 +367,8 @@ void getball(Mat& src, Point2f& point, Threshold main_thresh)
 
 }
 
-void printtext(Mat& src, int captured)
+void printtext(Mat& src, string msg)
 {
-    string msg = format("%d/%d ", captured, nImages);
         int baseLine = 0;
         Size textSize = getTextSize(msg, 1, 1, 1, &baseLine);
         Point textOrigin(src.cols - 2*textSize.width - 10, src.rows - 2*baseLine - 10);
@@ -365,6 +380,11 @@ void printtext(Mat& src, int captured)
 
 void thresh_load(FileStorage fs, Threshold& t)
 {
+    if (!fs.isOpened())
+    {
+        cerr << "Failed to open threshold file" << endl;
+        return;
+    }
     fs["min1"] >> t.min[0];
     fs["min2"] >> t.min[1];
     fs["min3"] >> t.min[2];

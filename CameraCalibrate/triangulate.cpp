@@ -16,7 +16,7 @@ using namespace cv;
 
 //yml files for each camera, containing their intrinsic parameters 
 //and their distortion coefficients
-const string camera_name_1 = "../comradey_internal.yml";
+const string camera_name_1 = "../raspicam_internal.yml";
 const string camera_name_2 = "../logitech.yml";
 const string threshold_name_0 = "../threshold_0.yml";
 const string threshold_name_1 = "../threshold_1.yml";

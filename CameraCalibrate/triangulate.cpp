@@ -21,14 +21,17 @@ const string camera_name_2 = "../logitech.yml";
 const string threshold_name_0 = "../threshold_0.yml";
 const string threshold_name_1 = "../threshold_1.yml";
 const string camerapair_file_name = "../camerapair.yml";
+const string pnp_name = "../pnp.yml";
 
 const int width = 7;
 const int height = 7;
-const float squareSize = 0.024;
+const float squaresize1 = 0.024;
+const float squaresize2 = 0.02;
+const Point3f offset(1000,60,720);
 
 const int nImages = 3;
-enum {DETECTION, CAPTURING, RECTIFIED, TRIANGULATING};
-const string mode_string[] = {"DETECTION","CAPTURING","RECTIFIED","TRIANGULATING"};
+enum {DETECTION, CAPTURING, RECTIFIED, PNPED, TRIANGULATING};
+const string mode_string[] = {"DETECTION","CAPTURING","RECTIFIED","PNPED", "TRIANGULATING"};
 const int delay = 1000;
 const Size patternsize(width,height);
 
@@ -46,10 +49,12 @@ class CameraPair
     public:
         CameraPair();
         void rectify(Size imgsize);
-        Point3f triangulate(Point2f point1, Point2f point2);
+        Mat triangulate(Point2f point1, Point2f point2);
         bool getcorners(Mat& src1, Mat &src2);
         void save();
-        bool rectified() {return m_rectified;}
+        int mode() {return m_mode;}
+        bool pnp(Mat& src1);
+        void capture() {m_mode = CAPTURING;};
     private:
         //obtained from sample calibration program Calibration_sample
         Mat m_camMat1; //intrinsic parameters of camera 1
@@ -70,21 +75,23 @@ class CameraPair
         Mat m_r2; //rotation matrix for camera 2
         Mat m_Q; //disparity-to-depth mapping matrix
         //for rectify()
-        
+
+        //for pnp()
+        Mat m_pnp_r;
+        Mat m_pnp_t;
         //storing image points
         vector<vector<Point2f> > m_imagePoints1; 
         vector<vector<Point2f> > m_imagePoints2; 
-        vector<vector<Point3f> > calcCorners();
+        vector<Point3f> calcCorners();
 
         bool getcorners_aux(Mat& src1, vector<Point2f> & corners);
-        bool m_rectified;
+        int m_mode;
 };
 
 CameraPair::CameraPair()
 {
-    FileStorage c1(camera_name_1, FileStorage::READ);
-    FileStorage c2(camera_name_2, FileStorage::READ);
     FileStorage c3;
+
     if (c3.open(camerapair_file_name, FileStorage::READ))
     {
         cout << "Loading rectification data from " << camerapair_file_name << endl;
@@ -96,13 +103,23 @@ CameraPair::CameraPair()
         c3["m_proj2"] >> m_proj2;
         c3["m_r1"] >> m_r1;
         c3["m_r2"] >> m_r2;
-        m_rectified = true;
+        m_mode = RECTIFIED;
         c3.release();
     }
-    else
+    else 
     {
-        m_rectified = false;
+        m_mode = DETECTION;
     }
+    if (c3.open(pnp_name, FileStorage::READ))
+    {
+        cout << "Loading pnp data from " << pnp_name << endl;
+        c3["pnp_r"] >> m_pnp_r;
+        c3["pnp_t"] >> m_pnp_t;
+        m_mode = PNPED;
+        c3.release();
+    }
+    FileStorage c1(camera_name_1, FileStorage::READ);
+    FileStorage c2(camera_name_2, FileStorage::READ);
     c1["camera_matrix"] >> m_camMat1;
     c2["camera_matrix"] >> m_camMat2;
     c1["distortion_coefficients"] >> m_dist1;
@@ -114,20 +131,24 @@ CameraPair::CameraPair()
 void CameraPair::save()
 {
     FileStorage c(camerapair_file_name, FileStorage::WRITE);
-     c << "m_t" << m_t;
-     c << "m_r" << m_r;
-     c << "m_e" << m_e;
-     c << "m_f" << m_f;
-     c << "m_proj1" << m_proj1;
-     c << "m_proj2" << m_proj2;
-     c << "m_r1" << m_r1;
-     c << "m_r2" << m_r2;
-     c.release();
+    c << "m_t" << m_t;
+    c << "m_r" << m_r;
+    c << "m_e" << m_e;
+    c << "m_f" << m_f;
+    c << "m_proj1" << m_proj1;
+    c << "m_proj2" << m_proj2;
+    c << "m_r1" << m_r1;
+    c << "m_r2" << m_r2;
+    c.release();
 }
 
 void CameraPair::rectify(Size imgsize)
 {
-    vector<vector<Point3f> > objectPoints = calcCorners();
+    vector<vector<Point3f> > objectPoints;
+    objectPoints.resize(nImages);
+    for( int i = 0; i < nImages; i++) 
+        objectPoints[i] = calcCorners();
+
     stereoCalibrate(objectPoints, m_imagePoints1, m_imagePoints2,
             m_camMat1, m_dist1, m_camMat2, m_dist2, imgsize,
             m_r, m_t, m_e, m_f);
@@ -141,10 +162,28 @@ void CameraPair::rectify(Size imgsize)
             m_r, m_t, m_r1, m_r2, m_proj1, m_proj2, m_Q);
     cout << "Projection Marix 1:" << endl << m_proj1 << endl;
     cout << "Projection Matrix 2:" << endl << m_proj2 << endl;
+    m_mode = RECTIFIED;
 
 }
 
-Point3f CameraPair::triangulate(Point2f point1, Point2f point2)
+bool CameraPair::pnp(Mat& src1)
+{
+    vector<Point2f> corners;
+    if(getcorners_aux(src1, corners))
+    {
+        vector<Point3f> objectPoints;
+        for( int j = 0; j < height; j++ )
+            for( int k = 0; k < width; k++ )
+                objectPoints.push_back(Point3f(offset.x,offset.y - float(k*squaresize2),
+                            offset.z - float(j*squaresize2)));
+        solvePnP(objectPoints, corners, m_camMat1, m_dist1, m_pnp_r, m_pnp_t);
+        m_pnp_r = m_pnp_r.inv();
+        return true;
+    }
+    return false;
+}
+
+Mat CameraPair::triangulate(Point2f point1, Point2f point2)
 {
     Mat homocoord; //reconstructed point in homogenous coordinates
     vector<Point3f> euclcoord(1); //reconstructed point in euclidean coordinates
@@ -152,27 +191,25 @@ Point3f CameraPair::triangulate(Point2f point1, Point2f point2)
     vector<Point2f> points2(1);
     points1[0] = point1;
     points2[0] = point2;
+    undistortPoints(points1, points1,m_camMat1,m_dist1);
+    undistortPoints(points2, points2,m_camMat2,m_dist2);
     cout << "Point 1: " << point1 << endl;
     cout << "Point 2: " << point2 << endl;
     triangulatePoints(m_proj1, m_proj2, points1, points2, homocoord);
     cout << "Homogeneous Coords: " << homocoord.t() << endl;
     convertPointsFromHomogeneous(homocoord.t(), euclcoord);
-    cout << "Euclidean Coords: " << euclcoord[0] << endl;
-    return euclcoord[0];
+    Mat euclcoord_mat = m_pnp_r*(Mat(euclcoord[0]) - m_pnp_t);
+    cout << "Euclidean Coords: " << euclcoord_mat << endl;
+    return euclcoord_mat;
 }
 
-vector<vector<Point3f> > CameraPair::calcCorners()
+vector<Point3f> CameraPair::calcCorners()
 {
-    vector<vector<Point3f> > corners;
-    corners.resize(nImages);
-    for( int i = 0; i < nImages; i++ )
-    {
-
-    for( int j = 0; j < height; j++ )
-        for( int k = 0; k < width; k++ )
-            corners[i].push_back(Point3f(float(k*squareSize),
-                        float(j*squareSize), 0));
-    }
+    vector<Point3f> corners;
+        for( int j = 0; j < height; j++ )
+            for( int k = 0; k < width; k++ )
+                corners.push_back(offset + Point3f(float(k*squaresize1),
+                            float(j*squaresize1), 0));
     return corners;
 
 }
@@ -208,19 +245,18 @@ int main(/*int argc, char** argv*/)
     Point2f point2;
     clock_t prevtimestamp = 0;
     bool found = false;
-    int mode = camerapair.rectified() ? RECTIFIED : DETECTION;
     bool blink = false;
     string msg;
-    Point3f current_point;
+    Mat current_point;
 
     while(true)
     {
         blink = false;
         c = waitKey(50);
 
-        if (mode == DETECTION && c == 'g') 
+        if (camerapair.mode() == DETECTION && c == 'g') 
         {
-            mode = CAPTURING;
+            camerapair.capture();
             cout << "Started Calibration" << endl;
         }
 
@@ -230,7 +266,7 @@ int main(/*int argc, char** argv*/)
 
         resize(src1,src1, src0.size());
 
-        if (mode == CAPTURING && clock() - prevtimestamp > delay*1e-3*CLOCKS_PER_SEC)
+        if (camerapair.mode() == CAPTURING && clock() - prevtimestamp > delay*1e-3*CLOCKS_PER_SEC)
         {
             if(camerapair.getcorners(src0,src1))
             {
@@ -239,7 +275,6 @@ int main(/*int argc, char** argv*/)
                 blink = true;
                 if (captured >= nImages)
                 {
-                    mode = RECTIFIED;
                     camerapair.rectify(src0.size());
                 }
             }
@@ -253,15 +288,20 @@ int main(/*int argc, char** argv*/)
             bitwise_not(src1, src1);
         }
 
-        if (mode == RECTIFIED)
+        if (camerapair.mode() == RECTIFIED && c == 'p')
+        {
+            camerapair.pnp(src0);
+        }
+        if (camerapair.mode() == PNPED)
         {
             getball(src0, point1, orange0);
             getball(src1, point2, orange1);
             if (c == 't')
             {
                 current_point = camerapair.triangulate(point1, point2);
-                msg = format("%0.3f,%0.3f,%0.3f",current_point.x,
-                        current_point.y, current_point.z);
+                msg = format("%0.3f,%0.3f,%0.3f",current_point.at<float>(0,0),
+                        current_point.at<float>(0,1),
+                        current_point.at<float>(0,2));
             }
         }
 
@@ -275,7 +315,7 @@ int main(/*int argc, char** argv*/)
         }
         if (c == 'm')
         {
-            cout << "Camera Mode is : " << mode_string[mode] << endl;
+            cout << "Camera Mode is : " << mode_string[camerapair.mode()] << endl;
         }
     }
 

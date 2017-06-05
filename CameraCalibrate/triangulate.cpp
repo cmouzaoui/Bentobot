@@ -76,6 +76,7 @@ class CameraPair
         Mat m_r1; //rotation matrix for camera 1
         Mat m_r2; //rotation matrix for camera 2
         Mat m_Q; //disparity-to-depth mapping matrix
+        double m_error;
         //for rectify()
 
         //for pnp()
@@ -142,6 +143,7 @@ void CameraPair::save()
     c << "m_proj2" << m_proj2;
     c << "m_r1" << m_r1;
     c << "m_r2" << m_r2;
+    c << "m_error" << m_error;
     c.release();
     }
     if(m_mode == PNPED)
@@ -160,7 +162,7 @@ void CameraPair::rectify(Size imgsize)
     for( int i = 0; i < nImages; i++) 
         objectPoints[i] = calcCorners();
 
-    stereoCalibrate(objectPoints, m_imagePoints1, m_imagePoints2,
+    m_error = stereoCalibrate(objectPoints, m_imagePoints1, m_imagePoints2,
             m_camMat1, m_dist1, m_camMat2, m_dist2, imgsize,
             m_r, m_t, m_e, m_f);
     //Debug output
@@ -168,6 +170,7 @@ void CameraPair::rectify(Size imgsize)
     cout << "Translation Matrix:" << endl << m_t << endl;
     cout << "Essential Matrix:" << endl << m_e << endl;
     cout << "Fundamental Matrix:" << endl << m_f << endl;
+    cout << "Reprojection Error: " << m_error << endl;
 
     stereoRectify(m_camMat1, m_dist1, m_camMat2, m_dist2, imgsize,
             m_r, m_t, m_r1, m_r2, m_proj1, m_proj2, m_Q);
@@ -220,8 +223,8 @@ Mat CameraPair::triangulate(Point2f point1, Point2f point2)
     /*
     euclcoord_mat.convertTo(euclcoord_mat,CV_64F);
     euclcoord_mat = m_pnp_r*(euclcoord_mat - m_pnp_t);
-    cout << "Euclidean Coords: " << euclcoord_mat << endl;
     */
+    cout << "Euclidean Coords: " << euclcoord_mat << endl;
     return euclcoord_mat;
 }
 
@@ -375,9 +378,9 @@ bool CameraPair::getcorners_single(Mat& src1, vector<Point2f> & corners)
     clock_t timer = clock();
     bool patternfound = findChessboardCorners(gray,patternsize,corners,
             CALIB_CB_FAST_CHECK);
-    cout << "Time taken to find corners: " << (clock()-timer)/CLOCKS_PER_SEC << "seconds" << endl;
     if(patternfound)
     {
+        cout << "Time taken to find corners: " << (clock()-timer)/CLOCKS_PER_SEC << "seconds" << endl;
         cout << "found a chessboard pattern!" << endl;
         cornerSubPix(gray, corners, Size(11,11), Size(-1,-1),
                 TermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER,30,0.1));

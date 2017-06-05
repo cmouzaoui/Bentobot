@@ -217,9 +217,11 @@ Mat CameraPair::triangulate(Point2f point1, Point2f point2)
     cout << "Homogeneous Coords: " << homocoord.t() << endl;
     convertPointsFromHomogeneous(homocoord.t(), euclcoord);
     Mat euclcoord_mat(euclcoord[0]);
+    /*
     euclcoord_mat.convertTo(euclcoord_mat,CV_64F);
     euclcoord_mat = m_pnp_r*(euclcoord_mat - m_pnp_t);
     cout << "Euclidean Coords: " << euclcoord_mat << endl;
+    */
     return euclcoord_mat;
 }
 

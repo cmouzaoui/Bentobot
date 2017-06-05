@@ -30,7 +30,7 @@ const float squaresize1 = 0.024;
 const float squaresize2 = 0.02;
 const Point3f offset(0.25+0.3683,0.02,0.413);
 
-const int nImages = 10;
+const int nImages = 1;
 enum {DETECTION, CAPTURING, RECTIFIED, PNPED, TRIANGULATING};
 const string mode_string[] = {"DETECTION","CAPTURING","RECTIFIED","PNPED", "TRIANGULATING"};
 const int delay = 1000;
@@ -173,7 +173,7 @@ void CameraPair::rectify(Size imgsize)
             m_r, m_t, m_r1, m_r2, m_proj1, m_proj2, m_Q);
     cout << "Projection Marix 1:" << endl << m_proj1 << endl;
     cout << "Projection Matrix 2:" << endl << m_proj2 << endl;
-    m_mode = RECTIFIED;
+    m_mode = PNPED;
 
 }
 
@@ -228,8 +228,8 @@ vector<Point3f> CameraPair::calcCorners()
     vector<Point3f> corners;
         for( int j = 0; j < height; j++ )
             for( int k = 0; k < width; k++ )
-                corners.push_back(offset + Point3f(float(k*squaresize1),
-                            float(j*squaresize1), 0));
+                corners.push_back(offset + Point3f(0,float(-k*squaresize1),
+                            float(-j*squaresize1)));
     return corners;
 
 }

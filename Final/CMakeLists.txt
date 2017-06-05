@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 2.8)
+project( Calibrate )
+find_package( OpenCV REQUIRED)
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+set(raspicam_DIR /usr/local/lib/cmake)
+find_package(raspicam)
+IF (raspicam_CV_FOUND)
+    MESSAGE(STATUS "COMPILING TRIANGULATION WITH RASPICAM")
+    add_executable( Triangulate_withSC Triangulate_withSC.cpp )
+    target_link_libraries(Triangulate_withSC ${raspicam_CV_LIBS})
+    target_link_libraries( Triangulate_withSC ${OpenCV_LIBS} )
+ELSE()
+    MESSAGE(WARNING "RASPICAM NOT FOUND IN YOUR SYSTEM. CANNOT COMPILE TRIANGULATION")
+ENDIF()
+
+

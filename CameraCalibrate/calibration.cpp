@@ -313,13 +313,13 @@ int main( int argc, char** argv )
     int delay;
     clock_t prevTimestamp = 0;
     int mode = DETECTION;
-    int cameraId = 1;
+    int cameraId = 0;
     vector<vector<Point2f> > imagePoints;
     vector<string> imageList;
     Pattern pattern = CHESSBOARD;
 
     cv::CommandLineParser parser(argc, argv,
-        "{help ||}{w|7|}{h|7|}{pt|chessboard|}{n|10|}{d|1000|}{s|0.025|}{o|out_camera_data.yml|}"
+        "{help ||}{w|7|}{h|7|}{pt|chessboard|}{n|10|}{d|1000|}{s|0.024|}{o|out_camera_data.yml|}"
         "{op||}{oe||}{zt||}{a|1|}{p||}{v||}{V||}{su||}"
         "{@input_data|0|}");
     if (parser.has("help"))

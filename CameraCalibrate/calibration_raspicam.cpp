@@ -400,13 +400,13 @@ int main( int argc, char** argv )
 
     }
 
-    if( !capture.isOpened() && imageList.empty() )
+    if( !cap1.isOpened() && imageList.empty() )
         return fprintf( stderr, "Could not initialize video (%d) capture\n",cameraId ), -2;
 
     if( !imageList.empty() )
         nframes = (int)imageList.size();
 
-    if( capture.isOpened() )
+    if( cap1.isOpened() )
         printf( "%s", liveCaptureHelp );
 
     namedWindow( "Image View", 1 );
@@ -416,7 +416,7 @@ int main( int argc, char** argv )
         Mat view, viewGray;
         bool blink = false;
 
-        if( capture.isOpened() )
+        if( cap1.isOpened() )
         {
             Mat view0;
             cap1.grab();
@@ -467,11 +467,11 @@ int main( int argc, char** argv )
             Size(-1,-1), TermCriteria( TermCriteria::EPS+TermCriteria::COUNT, 30, 0.1 ));
 
         if( mode == CAPTURING && found &&
-           (!capture.isOpened() || clock() - prevTimestamp > delay*1e-3*CLOCKS_PER_SEC) )
+           (!cap1.isOpened() || clock() - prevTimestamp > delay*1e-3*CLOCKS_PER_SEC) )
         {
             imagePoints.push_back(pointbuf);
             prevTimestamp = clock();
-            blink = capture.isOpened();
+            blink = cap1.isOpened();
         }
 
         if(found)
@@ -504,7 +504,7 @@ int main( int argc, char** argv )
         }
 
         imshow("Image View", view);
-        char key = (char)waitKey(capture.isOpened() ? 50 : 500);
+        char key = (char)waitKey(cap1.isOpened() ? 50 : 500);
 
         if( key == 27 )
             break;
@@ -512,7 +512,7 @@ int main( int argc, char** argv )
         if( key == 'u' && mode == CALIBRATED )
             undistortImage = !undistortImage;
 
-        if( capture.isOpened() && key == 'g' )
+        if( cap1.isOpened() && key == 'g' )
         {
             mode = CAPTURING;
             imagePoints.clear();
@@ -527,12 +527,12 @@ int main( int argc, char** argv )
                 mode = CALIBRATED;
             else
                 mode = DETECTION;
-            if( !capture.isOpened() )
+            if( !cap1.isOpened() )
                 break;
         }
     }
 
-    if( !capture.isOpened() && showUndistorted )
+    if( !cap1.isOpened() && showUndistorted )
     {
         Mat view, rview, map1, map2;
         initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat(),

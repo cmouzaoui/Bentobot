@@ -7,6 +7,7 @@
 #include <iostream>
 #include <string>
 #include <time.h>
+#include <unistd.h>
 #include <raspicam/raspicam_cv.h>
 
 #include "threshold.h"
@@ -16,8 +17,8 @@ using namespace cv;
 
 //yml files for each camera, containing their intrinsic parameters 
 //and their distortion coefficients
-const string camera_name_1 = "../raspicam_internal.yml";
-const string camera_name_2 = "../logitech.yml";
+const string camera_name_1 = "../logitech.yml";
+const string camera_name_2 = "../raspicam_internal.yml";
 const string threshold_name_0 = "../threshold_0.yml";
 const string threshold_name_1 = "../threshold_1.yml";
 const string camerapair_file_name = "../camerapair.yml";
@@ -27,9 +28,9 @@ const int width = 7;
 const int height = 7;
 const float squaresize1 = 0.024;
 const float squaresize2 = 0.02;
-const Point3f offset(1000,60,720);
+const Point3f offset(0.25+0.3683,0.02,0.413);
 
-const int nImages = 3;
+const int nImages = 10;
 enum {DETECTION, CAPTURING, RECTIFIED, PNPED, TRIANGULATING};
 const string mode_string[] = {"DETECTION","CAPTURING","RECTIFIED","PNPED", "TRIANGULATING"};
 const int delay = 1000;
@@ -55,6 +56,7 @@ class CameraPair
         int mode() {return m_mode;}
         bool pnp(Mat& src1);
         void capture() {m_mode = CAPTURING;};
+        bool getcorners_single(Mat& src1, vector<Point2f> & corners);
     private:
         //obtained from sample calibration program Calibration_sample
         Mat m_camMat1; //intrinsic parameters of camera 1
@@ -84,7 +86,6 @@ class CameraPair
         vector<vector<Point2f> > m_imagePoints2; 
         vector<Point3f> calcCorners();
 
-        bool getcorners_aux(Mat& src1, vector<Point2f> & corners);
         int m_mode;
 };
 
@@ -113,8 +114,8 @@ CameraPair::CameraPair()
     if (c3.open(pnp_name, FileStorage::READ))
     {
         cout << "Loading pnp data from " << pnp_name << endl;
-        c3["pnp_r"] >> m_pnp_r;
-        c3["pnp_t"] >> m_pnp_t;
+        c3["m_pnp_r"] >> m_pnp_r;
+        c3["m_pnp_t"] >> m_pnp_t;
         m_mode = PNPED;
         c3.release();
     }
@@ -130,6 +131,8 @@ CameraPair::CameraPair()
 
 void CameraPair::save()
 {
+    if (m_mode == RECTIFIED || m_mode == PNPED)
+    {
     FileStorage c(camerapair_file_name, FileStorage::WRITE);
     c << "m_t" << m_t;
     c << "m_r" << m_r;
@@ -140,6 +143,14 @@ void CameraPair::save()
     c << "m_r1" << m_r1;
     c << "m_r2" << m_r2;
     c.release();
+    }
+    if(m_mode == PNPED)
+    {
+    FileStorage c(pnp_name, FileStorage::WRITE);
+    c << "m_pnp_r" << m_pnp_r;
+    c << "m_pnp_t" << m_pnp_t;
+    c.release();
+    }
 }
 
 void CameraPair::rectify(Size imgsize)
@@ -169,15 +180,22 @@ void CameraPair::rectify(Size imgsize)
 bool CameraPair::pnp(Mat& src1)
 {
     vector<Point2f> corners;
-    if(getcorners_aux(src1, corners))
+    if(getcorners_single(src1, corners))
     {
         vector<Point3f> objectPoints;
         for( int j = 0; j < height; j++ )
             for( int k = 0; k < width; k++ )
                 objectPoints.push_back(Point3f(offset.x,offset.y - float(k*squaresize2),
                             offset.z - float(j*squaresize2)));
+
         solvePnP(objectPoints, corners, m_camMat1, m_dist1, m_pnp_r, m_pnp_t);
+        Rodrigues(m_pnp_r,m_pnp_r);
+        cout << "Rotation matrix: " << endl << m_pnp_r << endl;
+        cout << "Translation matrix " << endl << m_pnp_t << endl;
         m_pnp_r = m_pnp_r.inv();
+        cout << "Inverted rotation matrix: " << endl << m_pnp_r << endl;
+        m_mode = PNPED;
+        save();
         return true;
     }
     return false;
@@ -198,7 +216,9 @@ Mat CameraPair::triangulate(Point2f point1, Point2f point2)
     triangulatePoints(m_proj1, m_proj2, points1, points2, homocoord);
     cout << "Homogeneous Coords: " << homocoord.t() << endl;
     convertPointsFromHomogeneous(homocoord.t(), euclcoord);
-    Mat euclcoord_mat = m_pnp_r*(Mat(euclcoord[0]) - m_pnp_t);
+    Mat euclcoord_mat(euclcoord[0]);
+    euclcoord_mat.convertTo(euclcoord_mat,CV_64F);
+    euclcoord_mat = m_pnp_r*(euclcoord_mat - m_pnp_t);
     cout << "Euclidean Coords: " << euclcoord_mat << endl;
     return euclcoord_mat;
 }
@@ -231,16 +251,16 @@ int main(/*int argc, char** argv*/)
     cap1.set ( CV_CAP_PROP_FRAME_WIDTH, 640);
     cap1.set ( CV_CAP_PROP_FRAME_HEIGHT, 480);
     cout<<"Opening cap1..."<<endl;
+    sleep(1);
     if (!cap1.open()) {cerr<<"Error opening the camera"<<endl;return -1;}
 
 
-    Mat src0, src1;
+    Mat src0, src1, src0_orig;
     CameraPair camerapair;
 
     char c;
     int captured = 0;
-    vector<vector<Point2f> > points1;
-    vector<vector<Point2f> > points2;
+    vector<Point2f> corners(width*height);
     Point2f point1;
     Point2f point2;
     clock_t prevtimestamp = 0;
@@ -254,13 +274,14 @@ int main(/*int argc, char** argv*/)
         blink = false;
         c = waitKey(50);
 
-        if (camerapair.mode() == DETECTION && c == 'g') 
+        if (c == 'g') 
         {
             camerapair.capture();
             cout << "Started Calibration" << endl;
         }
 
         cap0 >> src0;
+        src0_orig = src0.clone();
         cap1.grab();
         cap1.retrieve (src1);
 
@@ -288,10 +309,18 @@ int main(/*int argc, char** argv*/)
             bitwise_not(src1, src1);
         }
 
-        if (camerapair.mode() == RECTIFIED && c == 'p')
+        if(camerapair.mode() == RECTIFIED)
         {
-            camerapair.pnp(src0);
+            camerapair.getcorners_single(src0, corners);
         }
+
+        if ((camerapair.mode() == RECTIFIED || camerapair.mode() == PNPED)
+                    && c == 'p')
+        {
+            cout << "Solving PnP..." << endl;
+            camerapair.pnp(src0_orig);
+        }
+
         if (camerapair.mode() == PNPED)
         {
             getball(src0, point1, orange0);
@@ -327,7 +356,7 @@ int main(/*int argc, char** argv*/)
 bool CameraPair::getcorners(Mat& src1, Mat &src2)
 {
     vector<Point2f> points1, points2;
-    if (getcorners_aux(src1, points1) && getcorners_aux(src2, points2))
+    if (getcorners_single(src1, points1) && getcorners_single(src2, points2))
     {
         m_imagePoints1.push_back(points1);
         m_imagePoints2.push_back(points2);
@@ -336,13 +365,15 @@ bool CameraPair::getcorners(Mat& src1, Mat &src2)
     return false;
 }
 
-bool CameraPair::getcorners_aux(Mat& src1, vector<Point2f> & corners)
+bool CameraPair::getcorners_single(Mat& src1, vector<Point2f> & corners)
 {
     Mat gray;
     cvtColor(src1,gray, COLOR_BGR2GRAY);
 
+    clock_t timer = clock();
     bool patternfound = findChessboardCorners(gray,patternsize,corners,
-            CV_CALIB_CB_ADAPTIVE_THRESH+CV_CALIB_CB_NORMALIZE_IMAGE+CV_CALIB_CB_FILTER_QUADS+CALIB_CB_FAST_CHECK);
+            CALIB_CB_FAST_CHECK);
+    cout << "Time taken to find corners: " << (clock()-timer)/CLOCKS_PER_SEC << "seconds" << endl;
     if(patternfound)
     {
         cout << "found a chessboard pattern!" << endl;

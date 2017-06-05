@@ -9,7 +9,10 @@
 #include <time.h>
 #include <unistd.h>
 #include <raspicam/raspicam_cv.h>
+#include <cmath>
 
+#include <wiringPi.h>
+#include <wiringSerial.h>
 #include "threshold.h"
 
 using namespace std;
@@ -33,7 +36,7 @@ const Point3f offset(0.25+0.3683,0.02,0.413);
 const int nImages = 10;
 enum {DETECTION, CAPTURING, RECTIFIED, PNPED, TRIANGULATING};
 const string mode_string[] = {"DETECTION","CAPTURING","RECTIFIED","PNPED", "TRIANGULATING"};
-const int delay = 1000;
+const int DELAY = 1000;
 const Size patternsize(width,height);
 
 const int threshold_slider_max = 255;
@@ -289,7 +292,7 @@ int main(/*int argc, char** argv*/)
 
         resize(src1,src1, src0.size());
 
-        if (camerapair.mode() == CAPTURING && clock() - prevtimestamp > delay*1e-3*CLOCKS_PER_SEC)
+        if (camerapair.mode() == CAPTURING && clock() - prevtimestamp > DELAY*1e-3*CLOCKS_PER_SEC)
         {
             if(camerapair.getcorners(src0,src1))
             {
@@ -329,12 +332,12 @@ int main(/*int argc, char** argv*/)
             getball(src1, point2, orange1);
             if (c == 't')
             {
-		int phi, theta;
+		float phi, theta;
                 current_point = camerapair.triangulate(point1, point2);
                 msg = format("%0.3f,%0.3f,%0.3f",current_point.at<float>(0,0),
                         current_point.at<float>(0,1),
                         current_point.at<float>(0,2));
-		cartToPolar(current_point.at<float>(0,1), current_point.at<float>(0,2), current_point.at<float>(0,2), phi, theta);
+		cartToPolar(current_point.at<float>(0,0), current_point.at<float>(0,1), current_point.at<float>(0,2), phi, theta);
 		serialComm();
             }
         }

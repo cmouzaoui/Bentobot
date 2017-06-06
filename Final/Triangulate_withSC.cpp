@@ -47,7 +47,7 @@ void printtext(Mat& src, string msg);
 void thresh_load(FileStorage fs, Threshold& t);
 
 void cartToPolar(float x, float y, float z, float& phi, float& theta);
-void serialComm();
+void serialComm(float x, float y, float z);
 
 
 class CameraPair
@@ -332,13 +332,13 @@ int main(/*int argc, char** argv*/)
             getball(src1, point2, orange1);
             if (c == 't')
             {
-		float phi, theta;
+                float phi, theta;
                 current_point = camerapair.triangulate(point1, point2);
                 msg = format("%0.3f,%0.3f,%0.3f",current_point.at<float>(0,0),
                         current_point.at<float>(0,1),
                         current_point.at<float>(0,2));
-		cartToPolar(current_point.at<float>(0,0), current_point.at<float>(0,1), current_point.at<float>(0,2), phi, theta);
-		serialComm();
+                //cartToPolar(current_point.at<float>(0,0), current_point.at<float>(0,1), current_point.at<float>(0,2), phi, theta);
+                serialComm(current_point.at<float>(0,0), current_point.at<float>(0,1), current_point.at<float>(0,2));
             }
         }
 
@@ -506,7 +506,7 @@ void cartToPolar(float x, float y, float z, float& phi, float& theta)
     cout << "Theta: " << theta << endl;
 }
 
-void serialComm()
+void serialComm(float x, float y, float z)
 {
 	const int BUFLEN = 50;
 	const char * port = "/dev/ttyACM0";
@@ -519,17 +519,17 @@ void serialComm()
 		cout << "Unable to open serial device: " << port << endl;
 	//	return 1;
 	}
-        float x,y,z,theta,phi;
-        cout << "Test x coordinate:" << endl;
-        cin >> x;
-        cout << "Test y coordinate:" << endl;
-        cin >> y;
-        cout << "Test z coordinate:" << endl;
-        cin >> z;
+//    float x,y,z,theta,phi;
+//    cout << "Test x coordinate:" << endl;
+//    cin >> x;
+//    cout << "Test y coordinate:" << endl;
+//    cin >> y;
+//    cout << "Test z coordinate:" << endl;
+//    cin >> z;
 
 	cartToPolar(x, y, z, phi, theta); 
-        sprintf(m,"%f,%f\ns\n",theta,phi);
-        cout << "Sending over the following message: " << m << endl;
+    sprintf(m,"%f,%f\ns\n",theta,phi);
+    cout << "Sending over the following message: " << m << endl;
 	serialPuts(fd, m);
 
 	serialClose(fd);

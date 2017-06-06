@@ -50,7 +50,7 @@ void printtext(Mat& src, string msg);
 void thresh_load(FileStorage fs, Threshold& t);
 
 void cartToPolar(float x, float y, float z, float& phi, float& theta);
-void serialComm();
+void serialComm(float x, float y, float z);
 
 
 class CameraPair
@@ -345,6 +345,7 @@ int main(/*int argc, char** argv*/)
             getball(src1, point2, orange1);
             if (c == 't')
             {
+<<<<<<< HEAD
                 camerapair.triangulate(point1, point2, current_point);
                 msg = format("%0.3f,%0.3f,%0.3f",current_point.at<double>(0,0),
                         current_point.at<double>(0,1),
@@ -522,7 +523,7 @@ void cartToPolar(float x, float y, float z, float& phi, float& theta)
     cout << "Theta: " << theta << endl;
 }
 
-void serialComm()
+void serialComm(float x, float y, float z)
 {
 	const int BUFLEN = 50;
 	const char * port = "/dev/ttyACM0";
@@ -530,6 +531,7 @@ void serialComm()
 	char m [BUFLEN];
 //        anglesdemo(m);
 
+<<<<<<< HEAD
         float x,y,z,theta,phi;
         cout << "Test x coordinate:" << endl;
         cin >> x;
@@ -537,10 +539,24 @@ void serialComm()
         cin >> y;
         cout << "Test z coordinate:" << endl;
         cin >> z;
+=======
+	if ((fd = serialOpen(port, 9600)) < 0)
+	{
+		cout << "Unable to open serial device: " << port << endl;
+	//	return 1;
+	}
+//    float x,y,z,theta,phi;
+//    cout << "Test x coordinate:" << endl;
+//    cin >> x;
+//    cout << "Test y coordinate:" << endl;
+//    cin >> y;
+//    cout << "Test z coordinate:" << endl;
+//    cin >> z;
+>>>>>>> bbddb79eeddf1f82829cf5dc55f259f9d93fc754
 
 	cartToPolar(x, y, z, phi, theta); 
-        sprintf(m,"%f,%f\ns\n",theta,phi);
-        cout << "Sending over the following message: " << m << endl;
+    sprintf(m,"%f,%f\ns\n",theta,phi);
+    cout << "Sending over the following message: " << m << endl;
 	serialPuts(fd, m);
 
 

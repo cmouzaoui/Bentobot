@@ -27,14 +27,16 @@ const string pnp_name = "../pnp.yml";
 const int width = 7;
 const int height = 7;
 const float squaresize1 = 0.024;
-const float squaresize2 = 0.02;
+const float squareSize2 = 0.016;
 const Point3f offset(0.25+0.3683,0.02,0.413);
 
-const int nImages = 1;
+const int nImages = 10;
 enum {DETECTION, CAPTURING, RECTIFIED, PNPED, TRIANGULATING};
+enum {CHESS,CIRCLES};
 const string mode_string[] = {"DETECTION","CAPTURING","RECTIFIED","PNPED", "TRIANGULATING"};
 const int delay = 1000;
-const Size patternsize(width,height);
+const Size chesssize(width,height);
+const Size circlesize(4,11);
 
 const int threshold_slider_max = 255;
 const int threshold_slider_min = 0;
@@ -56,7 +58,7 @@ class CameraPair
         int mode() {return m_mode;}
         bool pnp(Mat& src1);
         void capture() {m_mode = CAPTURING;};
-        bool getcorners_single(Mat& src1, vector<Point2f> & corners);
+        bool getcorners_single(Mat& src1, vector<Point2f> & corners, int patterntype);
     private:
         //obtained from sample calibration program Calibration_sample
         Mat m_camMat1; //intrinsic parameters of camera 1
@@ -85,7 +87,7 @@ class CameraPair
         //storing image points
         vector<vector<Point2f> > m_imagePoints1; 
         vector<vector<Point2f> > m_imagePoints2; 
-        vector<Point3f> calcCorners();
+        vector<Point3f> calcCorners(int patterntype);
 
         int m_mode;
 };
@@ -160,7 +162,7 @@ void CameraPair::rectify(Size imgsize)
     vector<vector<Point3f> > objectPoints;
     objectPoints.resize(nImages);
     for( int i = 0; i < nImages; i++) 
-        objectPoints[i] = calcCorners();
+        objectPoints[i] = calcCorners(CIRCLES);
 
     m_error = stereoCalibrate(objectPoints, m_imagePoints1, m_imagePoints2,
             m_camMat1, m_dist1, m_camMat2, m_dist2, imgsize,
@@ -183,13 +185,13 @@ void CameraPair::rectify(Size imgsize)
 bool CameraPair::pnp(Mat& src1)
 {
     vector<Point2f> corners;
-    if(getcorners_single(src1, corners))
+    if(getcorners_single(src1, corners,CHESS))
     {
         vector<Point3f> objectPoints;
         for( int j = 0; j < height; j++ )
             for( int k = 0; k < width; k++ )
-                objectPoints.push_back(Point3f(offset.x,offset.y - float(k*squaresize2),
-                            offset.z - float(j*squaresize2)));
+                objectPoints.push_back(Point3f(offset.x,offset.y - float(k*squareSize2),
+                            offset.z - float(j*squareSize2)));
 
         solvePnP(objectPoints, corners, m_camMat1, m_dist1, m_pnp_r, m_pnp_t);
         Rodrigues(m_pnp_r,m_pnp_r);
@@ -228,13 +230,24 @@ Mat CameraPair::triangulate(Point2f point1, Point2f point2)
     return euclcoord_mat;
 }
 
-vector<Point3f> CameraPair::calcCorners()
+vector<Point3f> CameraPair::calcCorners(int patterntype)
 {
     vector<Point3f> corners;
-        for( int j = 0; j < height; j++ )
-            for( int k = 0; k < width; k++ )
-                corners.push_back(offset + Point3f(0,float(-k*squaresize1),
-                            float(-j*squaresize1)));
+    switch(patterntype)
+    {
+        case CHESS:
+            for( int j = 0; j < height; j++ )
+                for( int k = 0; k < width; k++ )
+                    corners.push_back(offset + Point3f(0,float(-k*squaresize1),
+                                float(-j*squaresize1)));
+            break;
+        case CIRCLES:
+            for( int i = 0; i < circlesize.height; i++ )
+                for( int j = 0; j < circlesize.width; j++ )
+                    corners.push_back(Point3f(float((2*j + i % 2)*squareSize2),
+                                float(i*squareSize2), 0));
+            break;
+    }
     return corners;
 
 }
@@ -292,7 +305,7 @@ int main(/*int argc, char** argv*/)
 
         resize(src1,src1, src0.size());
 
-        if (camerapair.mode() == CAPTURING && clock() - prevtimestamp > delay*1e-3*CLOCKS_PER_SEC)
+        if (camerapair.mode() == CAPTURING && c == 'c') //clock() - prevtimestamp > delay*1e-3*CLOCKS_PER_SEC)
         {
             if(camerapair.getcorners(src0,src1))
             {
@@ -316,7 +329,7 @@ int main(/*int argc, char** argv*/)
 
         if(camerapair.mode() == RECTIFIED)
         {
-            camerapair.getcorners_single(src0, corners);
+            camerapair.getcorners_single(src0, corners,CHESS);
         }
 
         if ((camerapair.mode() == RECTIFIED || camerapair.mode() == PNPED)
@@ -361,7 +374,7 @@ int main(/*int argc, char** argv*/)
 bool CameraPair::getcorners(Mat& src1, Mat &src2)
 {
     vector<Point2f> points1, points2;
-    if (getcorners_single(src1, points1) && getcorners_single(src2, points2))
+    if (getcorners_single(src1, points1,CIRCLES) && getcorners_single(src2, points2,CIRCLES))
     {
         m_imagePoints1.push_back(points1);
         m_imagePoints2.push_back(points2);
@@ -370,21 +383,30 @@ bool CameraPair::getcorners(Mat& src1, Mat &src2)
     return false;
 }
 
-bool CameraPair::getcorners_single(Mat& src1, vector<Point2f> & corners)
+bool CameraPair::getcorners_single(Mat& src1, vector<Point2f> & corners, int patterntype)
 {
     Mat gray;
     cvtColor(src1,gray, COLOR_BGR2GRAY);
 
     clock_t timer = clock();
-    bool patternfound = findChessboardCorners(gray,patternsize,corners,
-            CALIB_CB_FAST_CHECK);
-    if(patternfound)
+    bool patternfound;     
+    switch(patterntype)
     {
-        cout << "Time taken to find corners: " << (clock()-timer)/CLOCKS_PER_SEC << "seconds" << endl;
-        cout << "found a chessboard pattern!" << endl;
-        cornerSubPix(gray, corners, Size(11,11), Size(-1,-1),
-                TermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER,30,0.1));
-        drawChessboardCorners(src1, patternsize, Mat(corners), patternfound);
+        case CHESS:
+            patternfound = findChessboardCorners(gray,chesssize,corners,
+                    CALIB_CB_FAST_CHECK | CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_NORMALIZE_IMAGE);
+            if(patternfound)
+            {
+                cout << "found a chess pattern!" << endl;
+                cornerSubPix(gray, corners, Size(11,11), Size(-1,-1),
+                        TermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER,30,0.1));
+                drawChessboardCorners(src1, chesssize, Mat(corners), patternfound);
+            }
+            break;
+        case CIRCLES:
+            patternfound = findCirclesGrid(gray, circlesize, corners,CALIB_CB_ASYMMETRIC_GRID);
+            drawChessboardCorners(src1, circlesize, Mat(corners), patternfound);
+            break;
     }
     return patternfound;
 }

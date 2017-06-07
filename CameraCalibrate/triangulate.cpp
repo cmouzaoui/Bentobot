@@ -7,6 +7,8 @@
 #include <iostream>
 #include <string>
 #include <time.h>
+#include <numeric>
+#include <math.h>
 #include <unistd.h>
 #include <raspicam/raspicam_cv.h>
 
@@ -57,6 +59,7 @@ class CameraPair
         void save();
         int mode() {return m_mode;}
         bool pnp(Mat& src1);
+        void findScale(Mat& src1, Mat& src2);
         void capture() {m_mode = CAPTURING;};
         bool getcorners_single(Mat& src1, vector<Point2f> & corners, int patterntype);
     private:
@@ -79,6 +82,8 @@ class CameraPair
         Mat m_r2; //rotation matrix for camera 2
         Mat m_Q; //disparity-to-depth mapping matrix
         double m_error;
+        double m_scale;
+        double m_scale_error;
         //for rectify()
 
         //for pnp()
@@ -119,6 +124,8 @@ CameraPair::CameraPair()
         cout << "Loading pnp data from " << pnp_name << endl;
         c3["m_pnp_r"] >> m_pnp_r;
         c3["m_pnp_t"] >> m_pnp_t;
+        c3["m_scale"] >> m_scale;
+        c3["m_scale_error"] >> m_scale_error;
         m_mode = PNPED;
         c3.release();
     }
@@ -130,6 +137,7 @@ CameraPair::CameraPair()
     c2["distortion_coefficients"] >> m_dist2;
     c1.release();
     c2.release();
+
 }
 
 void CameraPair::save()
@@ -153,6 +161,8 @@ void CameraPair::save()
     FileStorage c(pnp_name, FileStorage::WRITE);
     c << "m_pnp_r" << m_pnp_r;
     c << "m_pnp_t" << m_pnp_t;
+    c << "m_scale" << m_scale;
+    c << "m_scale_error" << m_scale_error;
     c.release();
     }
 }
@@ -185,26 +195,81 @@ void CameraPair::rectify(Size imgsize)
 bool CameraPair::pnp(Mat& src1)
 {
     vector<Point2f> corners;
-    if(getcorners_single(src1, corners,CHESS))
-    {
-        vector<Point3f> objectPoints;
-        for( int j = 0; j < height; j++ )
-            for( int k = 0; k < width; k++ )
-                objectPoints.push_back(Point3f(offset.x,offset.y - float(k*squareSize2),
-                            offset.z - float(j*squareSize2)));
+    if(!getcorners_single(src1, corners,CIRCLES)) 
+        return false;
 
-        solvePnP(objectPoints, corners, m_camMat1, m_dist1, m_pnp_r, m_pnp_t);
-        Rodrigues(m_pnp_r,m_pnp_r);
-        cout << "Rotation matrix: " << endl << m_pnp_r << endl;
-        cout << "Translation matrix " << endl << m_pnp_t << endl;
-        m_pnp_r = m_pnp_r.inv();
-        cout << "Inverted rotation matrix: " << endl << m_pnp_r << endl;
-        m_mode = PNPED;
-        save();
-        return true;
+    vector<Point3f> objectPoints = calcCorners(CIRCLES);
+
+    solvePnP(objectPoints, corners, m_camMat1, m_dist1, m_pnp_r, m_pnp_t);
+    Rodrigues(m_pnp_r,m_pnp_r);
+    cout << "Rotation matrix: " << endl << m_pnp_r << endl;
+    cout << "Translation matrix " << endl << m_pnp_t << endl;
+/*
+    vector<float> scale_vec;
+    for (int i = 0; i < corners.size(); i++)
+    {
+        Mat objectMat(objectPoints[i]);
+        objectMat.convertTo(objectMat,CV_64F);
+        Mat projectionMat = m_camMat1*(m_pnp_r*objectMat + m_pnp_t);
+        scale_vec.push_back(sqrt((pow(projectionMat.at<double>(0,0),2) + pow(projectionMat.at<double>(1,0),2) + pow(projectionMat.at<double>(2,0),2)) / (pow(corners[i].x,2)+pow(corners[i].y,2) +1)));
     }
+    double sum = accumulate(scale_vec.begin(),scale_vec.end(), 0.0);
+    m_scale = sum/ scale_vec.size();
+    cout << "Scale: " << m_scale << endl;
+    double sq_sum = inner_product(scale_vec.begin(),scale_vec.end(), 
+            scale_vec.begin(),0.0);
+    m_scale_error = sqrt(sq_sum/scale_vec.size() - m_scale*m_scale);
+    cout << "Scale stdev: " << m_scale_error << endl;
+    */
+
+    m_mode = PNPED;
+    /*
+    m_pnp_r = m_pnp_r.inv(); //this makes it easier to triangulate later
+    m_r1 = m_r1.inv();
+    cout << "Inverted rotation matrix: " << endl << m_pnp_r << endl;
+    */
+    save();
+    return true;
+
     return false;
 }
+
+void CameraPair::findScale(Mat& src1, Mat& src2)
+{
+    vector<Point2f> corners1;
+    vector<Point2f> corners2;
+    if(!getcorners_single(src1, corners1,CIRCLES) || !getcorners_single(src2,corners2, CIRCLES)) 
+        return;
+
+    vector<Point3f> objectPoints = calcCorners(CIRCLES);
+    
+    vector<float> scale_vec;
+    undistortPoints(corners1,corners1,m_camMat1,m_dist1);
+    undistortPoints(corners2,corners2,m_camMat2,m_dist2);
+    Mat homocoord;
+    vector<Point3f> euclcoords;
+    triangulatePoints(m_proj1, m_proj2, corners1, corners2, homocoord);
+    convertPointsFromHomogeneous(homocoord.t(), euclcoords);
+    for (int i = 0; i < objectPoints.size(); i++)
+    {
+    Mat object_mat(objectPoints[i]); //rectified coordinates
+
+    object_mat.convertTo(object_mat,CV_64F);
+    object_mat = m_pnp_r.inv()*object_mat + m_pnp_t;
+    object_mat = m_r1.inv()*object_mat + m_t;
+    Point3f objectPoint(object_mat);
+    scale_vec.push_back(norm(objectPoint)/norm(euclcoords[i]));
+    }
+    double sum = accumulate(scale_vec.begin(),scale_vec.end(), 0.0);
+    m_scale = sum/ scale_vec.size();
+    cout << "Scale: " << m_scale << endl;
+    double sq_sum = inner_product(scale_vec.begin(),scale_vec.end(), 
+            scale_vec.begin(),0.0);
+    m_scale_error = sqrt(sq_sum/scale_vec.size() - m_scale*m_scale);
+    cout << "Scale stdev: " << m_scale_error << endl;
+
+}
+
 
 Mat CameraPair::triangulate(Point2f point1, Point2f point2)
 {
@@ -221,11 +286,14 @@ Mat CameraPair::triangulate(Point2f point1, Point2f point2)
     triangulatePoints(m_proj1, m_proj2, points1, points2, homocoord);
     cout << "Homogeneous Coords: " << homocoord.t() << endl;
     convertPointsFromHomogeneous(homocoord.t(), euclcoord);
-    Mat euclcoord_mat(euclcoord[0]);
-    /*
+    //Mat euclcoord_mat(Point3f(homocoord.at<float>(0,0),homocoord.at<float>(0,1),homocoord.at<float>(0,2)));
+    Mat euclcoord_mat(euclcoord[0]); //rectified coordinates
+
     euclcoord_mat.convertTo(euclcoord_mat,CV_64F);
-    euclcoord_mat = m_pnp_r*(euclcoord_mat - m_pnp_t);
-    */
+    euclcoord_mat = m_scale*euclcoord_mat; //scaled world coordinates
+    euclcoord_mat = m_r1*(euclcoord_mat - m_t); //camera 1 coordinates
+    euclcoord_mat = m_pnp_r*(euclcoord_mat - m_pnp_t); //world coordinates
+
     cout << "Euclidean Coords: " << euclcoord_mat << endl;
     return euclcoord_mat;
 }
@@ -244,8 +312,8 @@ vector<Point3f> CameraPair::calcCorners(int patterntype)
         case CIRCLES:
             for( int i = 0; i < circlesize.height; i++ )
                 for( int j = 0; j < circlesize.width; j++ )
-                    corners.push_back(Point3f(float((2*j + i % 2)*squareSize2),
-                                float(i*squareSize2), 0));
+                    corners.push_back(offset + Point3f(0,float(-(2*j + i % 2)*squareSize2),
+                                float(-i*squareSize2)));
             break;
     }
     return corners;
@@ -335,7 +403,6 @@ int main(/*int argc, char** argv*/)
         if ((camerapair.mode() == RECTIFIED || camerapair.mode() == PNPED)
                     && c == 'p')
         {
-            cout << "Solving PnP..." << endl;
             camerapair.pnp(src0_orig);
         }
 
@@ -346,10 +413,12 @@ int main(/*int argc, char** argv*/)
             if (c == 't')
             {
                 current_point = camerapair.triangulate(point1, point2);
-                msg = format("%0.3f,%0.3f,%0.3f",current_point.at<float>(0,0),
-                        current_point.at<float>(0,1),
-                        current_point.at<float>(0,2));
+                msg = format("%0.3f,%0.3f,%0.3f",current_point.at<double>(0,0),
+                        current_point.at<double>(0,1),
+                        current_point.at<double>(0,2));
             }
+            if (c == 'f')
+                camerapair.findScale(src0,src1);
         }
 
         printtext(src0, msg);

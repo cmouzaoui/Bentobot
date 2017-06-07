@@ -7,6 +7,8 @@
 #include <iostream>
 #include <string>
 #include <time.h>
+#include <numeric>
+#include <math.h>
 #include <unistd.h>
 #include <raspicam/raspicam_cv.h>
 
@@ -27,14 +29,16 @@ const string pnp_name = "../pnp.yml";
 const int width = 7;
 const int height = 7;
 const float squaresize1 = 0.024;
-const float squaresize2 = 0.02;
+const float squareSize2 = 0.016;
 const Point3f offset(0.25+0.3683,0.02,0.413);
 
 const int nImages = 1;
 enum {DETECTION, CAPTURING, RECTIFIED, PNPED, TRIANGULATING};
+enum {CHESS,CIRCLES};
 const string mode_string[] = {"DETECTION","CAPTURING","RECTIFIED","PNPED", "TRIANGULATING"};
 const int delay = 1000;
-const Size patternsize(width,height);
+const Size chesssize(width,height);
+const Size circlesize(4,11);
 
 const int threshold_slider_max = 255;
 const int threshold_slider_min = 0;
@@ -55,8 +59,9 @@ class CameraPair
         void save();
         int mode() {return m_mode;}
         bool pnp(Mat& src1);
+        void findScale(Mat& src1, Mat& src2);
         void capture() {m_mode = CAPTURING;};
-        bool getcorners_single(Mat& src1, vector<Point2f> & corners);
+        bool getcorners_single(Mat& src1, vector<Point2f> & corners, int patterntype);
     private:
         //obtained from sample calibration program Calibration_sample
         Mat m_camMat1; //intrinsic parameters of camera 1
@@ -76,6 +81,9 @@ class CameraPair
         Mat m_r1; //rotation matrix for camera 1
         Mat m_r2; //rotation matrix for camera 2
         Mat m_Q; //disparity-to-depth mapping matrix
+        double m_error;
+        double m_scale;
+        double m_scale_error;
         //for rectify()
 
         //for pnp()
@@ -84,7 +92,7 @@ class CameraPair
         //storing image points
         vector<vector<Point2f> > m_imagePoints1; 
         vector<vector<Point2f> > m_imagePoints2; 
-        vector<Point3f> calcCorners();
+        vector<Point3f> calcCorners(int patterntype);
 
         int m_mode;
 };
@@ -116,6 +124,8 @@ CameraPair::CameraPair()
         cout << "Loading pnp data from " << pnp_name << endl;
         c3["m_pnp_r"] >> m_pnp_r;
         c3["m_pnp_t"] >> m_pnp_t;
+        c3["m_scale"] >> m_scale;
+        c3["m_scale_error"] >> m_scale_error;
         m_mode = PNPED;
         c3.release();
     }
@@ -127,6 +137,7 @@ CameraPair::CameraPair()
     c2["distortion_coefficients"] >> m_dist2;
     c1.release();
     c2.release();
+
 }
 
 void CameraPair::save()
@@ -142,6 +153,7 @@ void CameraPair::save()
     c << "m_proj2" << m_proj2;
     c << "m_r1" << m_r1;
     c << "m_r2" << m_r2;
+    c << "m_error" << m_error;
     c.release();
     }
     if(m_mode == PNPED)
@@ -149,6 +161,8 @@ void CameraPair::save()
     FileStorage c(pnp_name, FileStorage::WRITE);
     c << "m_pnp_r" << m_pnp_r;
     c << "m_pnp_t" << m_pnp_t;
+    c << "m_scale" << m_scale;
+    c << "m_scale_error" << m_scale_error;
     c.release();
     }
 }
@@ -158,9 +172,9 @@ void CameraPair::rectify(Size imgsize)
     vector<vector<Point3f> > objectPoints;
     objectPoints.resize(nImages);
     for( int i = 0; i < nImages; i++) 
-        objectPoints[i] = calcCorners();
+        objectPoints[i] = calcCorners(CIRCLES);
 
-    stereoCalibrate(objectPoints, m_imagePoints1, m_imagePoints2,
+    m_error = stereoCalibrate(objectPoints, m_imagePoints1, m_imagePoints2,
             m_camMat1, m_dist1, m_camMat2, m_dist2, imgsize,
             m_r, m_t, m_e, m_f);
     //Debug output
@@ -168,6 +182,7 @@ void CameraPair::rectify(Size imgsize)
     cout << "Translation Matrix:" << endl << m_t << endl;
     cout << "Essential Matrix:" << endl << m_e << endl;
     cout << "Fundamental Matrix:" << endl << m_f << endl;
+    cout << "Reprojection Error: " << m_error << endl;
 
     stereoRectify(m_camMat1, m_dist1, m_camMat2, m_dist2, imgsize,
             m_r, m_t, m_r1, m_r2, m_proj1, m_proj2, m_Q);
@@ -180,26 +195,81 @@ void CameraPair::rectify(Size imgsize)
 bool CameraPair::pnp(Mat& src1)
 {
     vector<Point2f> corners;
-    if(getcorners_single(src1, corners))
-    {
-        vector<Point3f> objectPoints;
-        for( int j = 0; j < height; j++ )
-            for( int k = 0; k < width; k++ )
-                objectPoints.push_back(Point3f(offset.x,offset.y - float(k*squaresize2),
-                            offset.z - float(j*squaresize2)));
+    if(!getcorners_single(src1, corners,CIRCLES)) 
+        return false;
 
-        solvePnP(objectPoints, corners, m_camMat1, m_dist1, m_pnp_r, m_pnp_t);
-        Rodrigues(m_pnp_r,m_pnp_r);
-        cout << "Rotation matrix: " << endl << m_pnp_r << endl;
-        cout << "Translation matrix " << endl << m_pnp_t << endl;
-        m_pnp_r = m_pnp_r.inv();
-        cout << "Inverted rotation matrix: " << endl << m_pnp_r << endl;
-        m_mode = PNPED;
-        save();
-        return true;
+    vector<Point3f> objectPoints = calcCorners(CIRCLES);
+
+    solvePnP(objectPoints, corners, m_camMat1, m_dist1, m_pnp_r, m_pnp_t);
+    Rodrigues(m_pnp_r,m_pnp_r);
+    cout << "Rotation matrix: " << endl << m_pnp_r << endl;
+    cout << "Translation matrix " << endl << m_pnp_t << endl;
+/*
+    vector<float> scale_vec;
+    for (int i = 0; i < corners.size(); i++)
+    {
+        Mat objectMat(objectPoints[i]);
+        objectMat.convertTo(objectMat,CV_64F);
+        Mat projectionMat = m_camMat1*(m_pnp_r*objectMat + m_pnp_t);
+        scale_vec.push_back(sqrt((pow(projectionMat.at<double>(0,0),2) + pow(projectionMat.at<double>(1,0),2) + pow(projectionMat.at<double>(2,0),2)) / (pow(corners[i].x,2)+pow(corners[i].y,2) +1)));
     }
+    double sum = accumulate(scale_vec.begin(),scale_vec.end(), 0.0);
+    m_scale = sum/ scale_vec.size();
+    cout << "Scale: " << m_scale << endl;
+    double sq_sum = inner_product(scale_vec.begin(),scale_vec.end(), 
+            scale_vec.begin(),0.0);
+    m_scale_error = sqrt(sq_sum/scale_vec.size() - m_scale*m_scale);
+    cout << "Scale stdev: " << m_scale_error << endl;
+    */
+
+    m_mode = PNPED;
+    /*
+    m_pnp_r = m_pnp_r.inv(); //this makes it easier to triangulate later
+    m_r1 = m_r1.inv();
+    cout << "Inverted rotation matrix: " << endl << m_pnp_r << endl;
+    */
+    save();
+    return true;
+
     return false;
 }
+
+void CameraPair::findScale(Mat& src1, Mat& src2)
+{
+    vector<Point2f> corners1;
+    vector<Point2f> corners2;
+    if(!getcorners_single(src1, corners1,CIRCLES) || !getcorners_single(src2,corners2, CIRCLES)) 
+        return;
+
+    vector<Point3f> objectPoints = calcCorners(CIRCLES);
+    
+    vector<float> scale_vec;
+    undistortPoints(corners1,corners1,m_camMat1,m_dist1);
+    undistortPoints(corners2,corners2,m_camMat2,m_dist2);
+    Mat homocoord;
+    vector<Point3f> euclcoords;
+    triangulatePoints(m_proj1, m_proj2, corners1, corners2, homocoord);
+    convertPointsFromHomogeneous(homocoord.t(), euclcoords);
+    for (int i = 0; i < objectPoints.size(); i++)
+    {
+    Mat object_mat(objectPoints[i]); //rectified coordinates
+
+    object_mat.convertTo(object_mat,CV_64F);
+    object_mat = m_pnp_r.inv()*object_mat + m_pnp_t;
+    object_mat = m_r1.inv()*object_mat + m_t;
+    Point3f objectPoint(object_mat);
+    scale_vec.push_back(norm(objectPoint)/norm(euclcoords[i]));
+    }
+    double sum = accumulate(scale_vec.begin(),scale_vec.end(), 0.0);
+    m_scale = sum/ scale_vec.size();
+    cout << "Scale: " << m_scale << endl;
+    double sq_sum = inner_product(scale_vec.begin(),scale_vec.end(), 
+            scale_vec.begin(),0.0);
+    m_scale_error = sqrt(sq_sum/scale_vec.size() - m_scale*m_scale);
+    cout << "Scale stdev: " << m_scale_error << endl;
+
+}
+
 
 Mat CameraPair::triangulate(Point2f point1, Point2f point2)
 {
@@ -216,22 +286,37 @@ Mat CameraPair::triangulate(Point2f point1, Point2f point2)
     triangulatePoints(m_proj1, m_proj2, points1, points2, homocoord);
     cout << "Homogeneous Coords: " << homocoord.t() << endl;
     convertPointsFromHomogeneous(homocoord.t(), euclcoord);
-    Mat euclcoord_mat(euclcoord[0]);
-    /*
+    
+    //Mat euclcoord_mat(Point3f(homocoord.at<float>(0,0),homocoord.at<float>(0,1),homocoord.at<float>(0,2)));
+    Mat euclcoord_mat(euclcoord[0]); //rectified coordinates
+
     euclcoord_mat.convertTo(euclcoord_mat,CV_64F);
-    euclcoord_mat = m_pnp_r*(euclcoord_mat - m_pnp_t);
+    euclcoord_mat = m_scale*euclcoord_mat; //scaled world coordinates
+    euclcoord_mat = m_r1*(euclcoord_mat - m_t); //camera 1 coordinates
+    euclcoord_mat = m_pnp_r*(euclcoord_mat - m_pnp_t); //world coordinates
+
     cout << "Euclidean Coords: " << euclcoord_mat << endl;
-    */
     return euclcoord_mat;
 }
 
-vector<Point3f> CameraPair::calcCorners()
+vector<Point3f> CameraPair::calcCorners(int patterntype)
 {
     vector<Point3f> corners;
-        for( int j = 0; j < height; j++ )
-            for( int k = 0; k < width; k++ )
-                corners.push_back(offset + Point3f(0,float(-k*squaresize1),
-                            float(-j*squaresize1)));
+    switch(patterntype)
+    {
+        case CHESS:
+            for( int j = 0; j < height; j++ )
+                for( int k = 0; k < width; k++ )
+                    corners.push_back(offset + Point3f(0,float(-k*squaresize1),
+                                float(-j*squaresize1)));
+            break;
+        case CIRCLES:
+            for( int i = 0; i < circlesize.height; i++ )
+                for( int j = 0; j < circlesize.width; j++ )
+                    corners.push_back(offset + Point3f(0,float(-(2*j + i % 2)*squareSize2),
+                                float(-i*squareSize2)));
+            break;
+    }
     return corners;
 
 }
@@ -289,7 +374,7 @@ int main(/*int argc, char** argv*/)
 
         resize(src1,src1, src0.size());
 
-        if (camerapair.mode() == CAPTURING && clock() - prevtimestamp > delay*1e-3*CLOCKS_PER_SEC)
+        if (camerapair.mode() == CAPTURING && c == 'c') //clock() - prevtimestamp > delay*1e-3*CLOCKS_PER_SEC)
         {
             if(camerapair.getcorners(src0,src1))
             {
@@ -313,13 +398,12 @@ int main(/*int argc, char** argv*/)
 
         if(camerapair.mode() == RECTIFIED)
         {
-            camerapair.getcorners_single(src0, corners);
+            camerapair.getcorners_single(src0, corners,CHESS);
         }
 
         if ((camerapair.mode() == RECTIFIED || camerapair.mode() == PNPED)
                     && c == 'p')
         {
-            cout << "Solving PnP..." << endl;
             camerapair.pnp(src0_orig);
         }
 
@@ -330,10 +414,12 @@ int main(/*int argc, char** argv*/)
             if (c == 't')
             {
                 current_point = camerapair.triangulate(point1, point2);
-                msg = format("%0.3f,%0.3f,%0.3f",current_point.at<float>(0,0),
-                        current_point.at<float>(0,1),
-                        current_point.at<float>(0,2));
+                msg = format("%0.3f,%0.3f,%0.3f",current_point.at<double>(0,0),
+                        current_point.at<double>(0,1),
+                        current_point.at<double>(0,2));
             }
+            if (c == 'f')
+                camerapair.findScale(src0,src1);
         }
 
         printtext(src0, msg);
@@ -358,7 +444,7 @@ int main(/*int argc, char** argv*/)
 bool CameraPair::getcorners(Mat& src1, Mat &src2)
 {
     vector<Point2f> points1, points2;
-    if (getcorners_single(src1, points1) && getcorners_single(src2, points2))
+    if (getcorners_single(src1, points1,CIRCLES) && getcorners_single(src2, points2,CIRCLES))
     {
         m_imagePoints1.push_back(points1);
         m_imagePoints2.push_back(points2);
@@ -367,21 +453,30 @@ bool CameraPair::getcorners(Mat& src1, Mat &src2)
     return false;
 }
 
-bool CameraPair::getcorners_single(Mat& src1, vector<Point2f> & corners)
+bool CameraPair::getcorners_single(Mat& src1, vector<Point2f> & corners, int patterntype)
 {
     Mat gray;
     cvtColor(src1,gray, COLOR_BGR2GRAY);
 
     clock_t timer = clock();
-    bool patternfound = findChessboardCorners(gray,patternsize,corners,
-            CALIB_CB_FAST_CHECK);
-    cout << "Time taken to find corners: " << (clock()-timer)/CLOCKS_PER_SEC << "seconds" << endl;
-    if(patternfound)
+    bool patternfound;     
+    switch(patterntype)
     {
-        cout << "found a chessboard pattern!" << endl;
-        cornerSubPix(gray, corners, Size(11,11), Size(-1,-1),
-                TermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER,30,0.1));
-        drawChessboardCorners(src1, patternsize, Mat(corners), patternfound);
+        case CHESS:
+            patternfound = findChessboardCorners(gray,chesssize,corners,
+                    CALIB_CB_FAST_CHECK | CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_NORMALIZE_IMAGE);
+            if(patternfound)
+            {
+                cout << "found a chess pattern!" << endl;
+                cornerSubPix(gray, corners, Size(11,11), Size(-1,-1),
+                        TermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER,30,0.1));
+                drawChessboardCorners(src1, chesssize, Mat(corners), patternfound);
+            }
+            break;
+        case CIRCLES:
+            patternfound = findCirclesGrid(gray, circlesize, corners,CALIB_CB_ASYMMETRIC_GRID);
+            drawChessboardCorners(src1, circlesize, Mat(corners), patternfound);
+            break;
     }
     return patternfound;
 }

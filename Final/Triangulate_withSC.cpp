@@ -20,12 +20,12 @@ using namespace cv;
 
 //yml files for each camera, containing their intrinsic parameters 
 //and their distortion coefficients
-const string camera_name_1 = "../logitech.yml";
-const string camera_name_2 = "../raspicam_internal.yml";
-const string threshold_name_0 = "../threshold_0.yml";
-const string threshold_name_1 = "../threshold_1.yml";
-const string camerapair_file_name = "../camerapair.yml";
-const string pnp_name = "../pnp.yml";
+const string camera_name_1 = "logitech.yml";
+const string camera_name_2 = "raspicam_internal.yml";
+const string threshold_name_0 = "threshold_0.yml";
+const string threshold_name_1 = "threshold_1.yml";
+const string camerapair_file_name = "camerapair.yml";
+const string pnp_name = "pnp.yml";
 
 const int width = 7;
 const int height = 7;
@@ -42,12 +42,15 @@ const Size patternsize(width,height);
 const int threshold_slider_max = 255;
 const int threshold_slider_min = 0;
 
+const int BUFLEN = 50;
+const char * port = "/dev/ttyACM0";
+
 void getball(Mat& src1, Point2f& point2, Threshold main_thresh);
 void printtext(Mat& src, string msg);
 void thresh_load(FileStorage fs, Threshold& t);
 
 void cartToPolar(float x, float y, float z, float& phi, float& theta);
-void serialComm();
+void serialComm(float x, float y, float z);
 
 
 class CameraPair
@@ -55,7 +58,7 @@ class CameraPair
     public:
         CameraPair();
         void rectify(Size imgsize);
-        Mat triangulate(Point2f point1, Point2f point2);
+        void triangulate(Point2f point1, Point2f point2, Mat& euclcoord);
         bool getcorners(Mat& src1, Mat &src2);
         void save();
         int mode() {return m_mode;}
@@ -206,7 +209,7 @@ bool CameraPair::pnp(Mat& src1)
     return false;
 }
 
-Mat CameraPair::triangulate(Point2f point1, Point2f point2)
+void CameraPair::triangulate(Point2f point1, Point2f point2, Mat& euclcoord_mat2)
 {
     Mat homocoord; //reconstructed point in homogenous coordinates
     vector<Point3f> euclcoord(1); //reconstructed point in euclidean coordinates
@@ -225,7 +228,7 @@ Mat CameraPair::triangulate(Point2f point1, Point2f point2)
     euclcoord_mat.convertTo(euclcoord_mat,CV_64F);
     euclcoord_mat = m_pnp_r*(euclcoord_mat - m_pnp_t);
     cout << "Euclidean Coords: " << euclcoord_mat << endl;
-    return euclcoord_mat;
+    euclcoord_mat.copyTo(euclcoord_mat2);
 }
 
 vector<Point3f> CameraPair::calcCorners()
@@ -259,6 +262,13 @@ int main(/*int argc, char** argv*/)
     sleep(1);
     if (!cap1.open()) {cerr<<"Error opening the camera"<<endl;return -1;}
 
+    int fd;
+    if ((fd = serialOpen(port, 9600)) < 0)
+    {
+        cout << "Unable to open serial device: " << port << endl;
+        //	return 1;
+    }
+
 
     Mat src0, src1, src0_orig;
     CameraPair camerapair;
@@ -273,6 +283,9 @@ int main(/*int argc, char** argv*/)
     bool blink = false;
     string msg;
     Mat current_point;
+    
+    char m [BUFLEN];
+    float phi, theta;
 
     while(true)
     {
@@ -305,7 +318,7 @@ int main(/*int argc, char** argv*/)
                 }
             }
 
-        msg = format("%d/%d ", captured, nImages);
+            msg = format("%d/%d ", captured, nImages);
         }
 
         if( blink )
@@ -320,7 +333,7 @@ int main(/*int argc, char** argv*/)
         }
 
         if ((camerapair.mode() == RECTIFIED || camerapair.mode() == PNPED)
-                    && c == 'p')
+                && c == 'p')
         {
             cout << "Solving PnP..." << endl;
             camerapair.pnp(src0_orig);
@@ -332,13 +345,15 @@ int main(/*int argc, char** argv*/)
             getball(src1, point2, orange1);
             if (c == 't')
             {
-		float phi, theta;
-                current_point = camerapair.triangulate(point1, point2);
-                msg = format("%0.3f,%0.3f,%0.3f",current_point.at<float>(0,0),
-                        current_point.at<float>(0,1),
-                        current_point.at<float>(0,2));
-		cartToPolar(current_point.at<float>(0,0), current_point.at<float>(0,1), current_point.at<float>(0,2), phi, theta);
-		serialComm();
+<<<<<<< HEAD
+                camerapair.triangulate(point1, point2, current_point);
+                msg = format("%0.3f,%0.3f,%0.3f",current_point.at<double>(0,0),
+                        current_point.at<double>(0,1),
+                        current_point.at<double>(0,2));
+                cartToPolar(current_point.at<double>(0,0), current_point.at<double>(0,1), current_point.at<double>(0,2), phi, theta);
+                sprintf(m,"%f,%f\ns\n",theta,phi);
+                cout << "Sending over the following message: " << m << endl;
+                serialPuts(fd, m);
             }
         }
 
@@ -348,6 +363,7 @@ int main(/*int argc, char** argv*/)
         if (c == 27) 
         {
             camerapair.save();
+	    serialClose(fd);
             break;
         }
         if (c == 'm')
@@ -356,6 +372,7 @@ int main(/*int argc, char** argv*/)
         }
     }
 
+    serialClose(fd);
     return 0;
 }
 
@@ -506,7 +523,7 @@ void cartToPolar(float x, float y, float z, float& phi, float& theta)
     cout << "Theta: " << theta << endl;
 }
 
-void serialComm()
+void serialComm(float x, float y, float z)
 {
 	const int BUFLEN = 50;
 	const char * port = "/dev/ttyACM0";
@@ -514,11 +531,7 @@ void serialComm()
 	char m [BUFLEN];
 //        anglesdemo(m);
 
-	if ((fd = serialOpen(port, 9600)) < 0)
-	{
-		cout << "Unable to open serial device: " << port << endl;
-	//	return 1;
-	}
+<<<<<<< HEAD
         float x,y,z,theta,phi;
         cout << "Test x coordinate:" << endl;
         cin >> x;
@@ -526,12 +539,25 @@ void serialComm()
         cin >> y;
         cout << "Test z coordinate:" << endl;
         cin >> z;
+=======
+	if ((fd = serialOpen(port, 9600)) < 0)
+	{
+		cout << "Unable to open serial device: " << port << endl;
+	//	return 1;
+	}
+//    float x,y,z,theta,phi;
+//    cout << "Test x coordinate:" << endl;
+//    cin >> x;
+//    cout << "Test y coordinate:" << endl;
+//    cin >> y;
+//    cout << "Test z coordinate:" << endl;
+//    cin >> z;
+>>>>>>> bbddb79eeddf1f82829cf5dc55f259f9d93fc754
 
 	cartToPolar(x, y, z, phi, theta); 
-        sprintf(m,"%f,%f\ns\n",theta,phi);
-        cout << "Sending over the following message: " << m << endl;
+    sprintf(m,"%f,%f\ns\n",theta,phi);
+    cout << "Sending over the following message: " << m << endl;
 	serialPuts(fd, m);
 
-	serialClose(fd);
 
 }

@@ -319,7 +319,7 @@ int main( int argc, char** argv )
     Pattern pattern = CHESSBOARD;
 
     cv::CommandLineParser parser(argc, argv,
-        "{help ||}{w|7|}{h|7|}{pt|chessboard|}{n|10|}{d|1000|}{s|0.024|}{o|out_camera_data.yml|}"
+        "{help ||}{w|7|}{h|7|}{pt|chessboard|}{n|20|}{d|5000|}{s|0.024|}{o|out_camera_data.yml|}"
         "{op||}{oe||}{zt||}{a|1|}{p||}{v||}{V||}{su||}"
         "{@input_data|0|}");
     if (parser.has("help"))
@@ -439,7 +439,7 @@ int main( int argc, char** argv )
         {
             case CHESSBOARD:
                 found = findChessboardCorners( view, boardSize, pointbuf,
-                    CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_FAST_CHECK | CALIB_CB_NORMALIZE_IMAGE);
+                    CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_FAST_CHECK);// | CALIB_CB_NORMALIZE_IMAGE);
                 break;
             case CIRCLES_GRID:
                 found = findCirclesGrid( view, boardSize, pointbuf );

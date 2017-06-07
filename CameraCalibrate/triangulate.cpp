@@ -32,7 +32,7 @@ const float squaresize1 = 0.024;
 const float squareSize2 = 0.016;
 const Point3f offset(0.25+0.3683,0.02,0.413);
 
-const int nImages = 10;
+const int nImages = 1;
 enum {DETECTION, CAPTURING, RECTIFIED, PNPED, TRIANGULATING};
 enum {CHESS,CIRCLES};
 const string mode_string[] = {"DETECTION","CAPTURING","RECTIFIED","PNPED", "TRIANGULATING"};
@@ -286,6 +286,7 @@ Mat CameraPair::triangulate(Point2f point1, Point2f point2)
     triangulatePoints(m_proj1, m_proj2, points1, points2, homocoord);
     cout << "Homogeneous Coords: " << homocoord.t() << endl;
     convertPointsFromHomogeneous(homocoord.t(), euclcoord);
+    
     //Mat euclcoord_mat(Point3f(homocoord.at<float>(0,0),homocoord.at<float>(0,1),homocoord.at<float>(0,2)));
     Mat euclcoord_mat(euclcoord[0]); //rectified coordinates
 

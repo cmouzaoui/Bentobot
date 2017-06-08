@@ -30,8 +30,8 @@ struct Threshold
     int max[3];
 };
 
-const Threshold orange = {.min = {9,26,228},
-    .max = {42,244,255}};
+const Threshold orange = {.min = {0,0,0},
+    .max = {255,255,255}};
 
 //function primitives
 

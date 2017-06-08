@@ -10,7 +10,7 @@ const int M2_Dir = 7;    // pin7 = direction of motor 2
 Servo trigger;
 const int servoPin = 10; //yellow signal wire to pin 10
 
-float theta0 = -82, phi0 = 48.76;  //48.76 is when launcher is resting backwards, 3.88 is forward
+float theta0 = -90, phi0 = 48.76;  //48.76 is when launcher is resting backwards, 3.88 is forward
 float theta_now = theta0;
 float phi_now = phi0;
 int theta_increment = 0; 
@@ -87,7 +87,7 @@ void loop() {
       else
         phi_increment = 0;
         
-      moveTo(theta + theta_increment, phi + phi_increment);
+      moveTo(theta_now + theta_increment, phi_now + phi_increment);
     }  
     main_string = main_string.substring(newline_index+1);
   }
@@ -162,24 +162,28 @@ void move(float p1, float p2){
 
 void moveTo(float theta, float phi){
   
-    if (abs(theta) > 110 || phi > 48.76 || abs(phi) < 3.88)  // -50<p1<50 for now, 3.88<p2<48.76
+  if (abs(theta)>60 && (phi < 3.88 || phi >48.76))  //both angles out of range
   {
-    Serial.println("Invalid Angle(s)");
+    Serial.println("InVaLid AnGLeS"); 
+  }
+  else if (abs(theta) > 60 && phi>=3.8 && phi<=48.76)  // theta out of range, phi good
+  {
+    Serial.println("invalid theta");
+    move(0, phi-phi_now);
+    phi_now = phi;  //only change phi
+  }
+  else if ((phi > 48.76 || phi < 3.88) && abs(theta)<=60)  // phi out of range, theta good
+  {
+    Serial.println("invalid phi");
+    move(theta-theta_now, 0);
+    theta_now = theta;  //only change theta
   }
   else {
-    
-      move(theta-theta_now, phi-phi_now);
-//  Serial.print("We want to move this much: "); Serial.print(theta-theta_now); Serial.print(",");  Serial.println(phi-phi_now);
-//  Serial.print("We want to move this much: "); Serial.print(theta-theta0); Serial.print(",");  Serial.println(phi-phi_now);
-  theta_now = theta;
-  phi_now = phi;
-  Serial.print("Moved to: ");
-  Serial.print(theta_now);
-  Serial.print(",");
-  Serial.println(phi);
+    move(theta-theta_now, phi-phi_now); // -60<theta<60 and 3.88<phi<48.76
+    theta_now = theta;
+    phi_now = phi;
   }
-    
-//  Serial.print("The new position is: "); Serial.print(theta_now); Serial.print(","); Serial.println(phi_now);
+  Serial.print("Moved to: "); Serial.print(theta_now); Serial.print(","); Serial.println(phi_now);  
 }
 
 void shoot(){

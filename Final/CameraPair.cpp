@@ -11,13 +11,21 @@ CameraPair::CameraPair()
     {
         cout << "Loading rectification data from " << camerapair_file_name << endl;
         c3["m_r"] >> m_r;
+        cout << "m_r: " << m_r << endl;
         c3["m_t"] >> m_t;
+        cout << "m_t: " << m_t << endl;
         c3["m_e"] >> m_e;
+        cout << "m_e: " << m_e << endl;
         c3["m_f"] >> m_f;
+        cout << "m_f: " << m_f << endl;
         c3["m_proj1"] >> m_proj1;
+        cout << "m_proj1: " << m_proj1 << endl;
         c3["m_proj2"] >> m_proj2;
+        cout << "m_proj2: " << m_proj2 << endl;
         c3["m_r1"] >> m_r1;
+        cout << "m_r1: " << m_r1 << endl;
         c3["m_r2"] >> m_r2;
+        cout << "m_r2: " << m_r2 << endl;
         m_mode = RECTIFIED;
         c3.release();
     }
@@ -29,9 +37,13 @@ CameraPair::CameraPair()
     {
         cout << "Loading pnp data from " << pnp_name << endl;
         c3["m_pnp_r"] >> m_pnp_r;
+        cout << "m_pnp_r: " << m_pnp_r << endl;
         c3["m_pnp_t"] >> m_pnp_t;
+        cout << "m_pnp_t: " << m_pnp_t << endl;
         c3["m_scale"] >> m_scale;
+        cout << "m_scale: " << m_scale << endl;
         c3["m_scale_error"] >> m_scale_error;
+        cout << "m_scale_error: " << m_scale_error << endl;
         m_mode = PNPED;
         c3.release();
     }
@@ -119,8 +131,8 @@ void CameraPair::findScale(Mat& src1, Mat& src2)
     Mat object_mat(objectPoints[i]); //rectified coordinates
 
     object_mat.convertTo(object_mat,CV_64F);
-    object_mat = m_pnp_r*object_mat + m_pnp_t;
-    object_mat = m_r1*object_mat + m_t;
+    object_mat = m_pnp_r*object_mat + m_pnp_t; //world to cam1 coords
+    object_mat = m_r1*object_mat; //cam1 coords to rectified
     Point3f objectPoint(object_mat);
     scale_vec.push_back(norm(objectPoint)/norm(euclcoords[i]));
     }
@@ -153,18 +165,20 @@ bool CameraPair::pnp(Mat& src1)
     return false;
 }
 
-Mat CameraPair::triangulate(Point2f point1, Point2f point2)
+Mat CameraPair::triangulate(Point2f point1, Point2f point2, Point2f& reproject1)
 {
     Mat homocoord; //reconstructed point in homogenous coordinates
     vector<Point3f> euclcoord(1); //reconstructed point in euclidean coordinates
     vector<Point2f> points1(1);
     vector<Point2f> points2(1);
+    vector<Point2f> reprojectpoints1(1);
     points1[0] = point1;
     points2[0] = point2;
     undistortPoints(points1, points1,m_camMat1,m_dist1);
     undistortPoints(points2, points2,m_camMat2,m_dist2);
     cout << "Point 1: " << point1 << endl;
     cout << "Point 2: " << point2 << endl;
+    /*
     triangulatePoints(m_proj1, m_proj2, points1, points2, homocoord);
     cout << "Homogeneous Coords: " << homocoord.t() << endl;
     convertPointsFromHomogeneous(homocoord.t(), euclcoord);
@@ -173,12 +187,66 @@ Mat CameraPair::triangulate(Point2f point1, Point2f point2)
     Mat euclcoord_mat(euclcoord[0]); //rectified coordinates
 
     euclcoord_mat.convertTo(euclcoord_mat,CV_64F);
-    euclcoord_mat = m_scale*euclcoord_mat; //scaled world coordinates
-    euclcoord_mat = m_r1.inv()*(euclcoord_mat - m_t); //camera 1 coordinates
-    euclcoord_mat = m_pnp_r.inv()*(euclcoord_mat - m_pnp_t); //world coordinates
+    euclcoord_mat = m_scale*euclcoord_mat; //scaled rectified coordinates
 
-    cout << "Euclidean Coords: " << euclcoord_mat << endl;
-    return euclcoord_mat;
+    euclcoord_mat = m_r1.inv()*(euclcoord_mat); //camera 1 coordinates
+    Mat r_vec; 
+    Rodrigues(m_pnp_r, r_vec);
+    //projectPoints(euclcoord,r_vec,m_pnp_t,m_camMat1,m_dist1,reprojectpoints1);
+    //reproject1 = reprojectpoints1[0];
+    Mat rep1 = m_camMat1*(m_pnp_r*(euclcoord_mat)+m_pnp_t);
+    cout << "Reprojected point: " << rep1 << endl;
+    euclcoord_mat = m_pnp_r.inv()*(euclcoord_mat - m_pnp_t); //world coordinates
+    */
+    Mat extrinsic1(3,4,CV_64F);
+    Mat M1 = extrinsic1.col(3);
+    //m_pnp_t.copyTo(M1);
+    m_pnp_t.copyTo(extrinsic1.col(3));
+    M1 = extrinsic1.colRange(0,2);
+    //m_pnp_r.copyTo(M1);
+    m_pnp_r.copyTo(extrinsic1.colRange(0,3));
+    cout << "Extrinsic Matrix 1: " << extrinsic1 << endl;
+    Mat m_pnp_r2 = m_r*m_pnp_r;
+    cout << "Rotation Matrix 2: " << m_pnp_r2 << endl;
+    Mat m_pnp_t2 = m_r*m_pnp_t + m_t;
+    cout << "Translation Matrix 2: " << m_pnp_t2 << endl;
+    Mat extrinsic2(3,4,CV_64F);
+    M1 = extrinsic2.col(3);
+    //m_pnp_t2.copyTo(M1);
+    m_pnp_t2.copyTo(extrinsic2.col(3));
+    M1 = extrinsic2.colRange(0,2);
+    //m_pnp_r2.copyTo(M1);
+    m_pnp_r2.copyTo(extrinsic2.colRange(0,3));
+    cout << "Extrinsic Matrix 2: " << extrinsic2 << endl;
+
+    Mat P = m_camMat1*extrinsic1;
+    cout << "Camera Matrix 1: " << P << endl;
+    Mat P1 = m_camMat2*extrinsic2;
+    cout << "Camera Matrix 2: " << P1 << endl;
+
+    Mat A = (Mat_<double>(4,3) << point1.x*P.at<double>(2,0)-P.at<double>(0,0),
+        point1.x*P.at<double>(2,1)-P.at<double>(0,1),
+        point1.x*P.at<double>(2,2)-P.at<double>(0,2),
+        point1.y*P.at<double>(2,0)-P.at<double>(1,0),
+        point1.y*P.at<double>(2,1)-P.at<double>(1,1),
+        point1.y*P.at<double>(2,2)-P.at<double>(1,2),
+        point2.x*P1.at<double>(2,0)-P1.at<double>(0,0),
+        point2.x*P1.at<double>(2,1)-P1.at<double>(0,1),
+        point2.x*P1.at<double>(2,2)-P1.at<double>(0,2),
+        point2.y*P1.at<double>(2,0)-P1.at<double>(1,0),
+        point2.y*P1.at<double>(2,1)-P1.at<double>(1,1),
+        point2.y*P1.at<double>(2,2)-P1.at<double>(1,2));
+    cout << "A: " << A << endl;
+    Mat B = (Mat_<double>(4,1) << -(point1.x*P.at<double>(2,3)-P.at<double>(0,3)),
+        -(point1.y*P.at<double>(2,3)-P.at<double>(1,3)),
+        -(point2.x*P1.at<double>(2,3)-P1.at<double>(0,3)),
+        -(point2.y*P1.at<double>(2,3)-P1.at<double>(1,3)));
+    cout << "B: " << B << endl;
+    Mat X;
+    solve(A,B,X,DECOMP_SVD);
+
+    cout << "Euclidean Coords: " << X << endl;
+    return X;
 }
 
 vector<Point3f> CameraPair::calcCorners(int patterntype)
@@ -195,8 +263,8 @@ vector<Point3f> CameraPair::calcCorners(int patterntype)
         case CIRCLES:
             for( int i = 0; i < circlesize.height; i++ )
                 for( int j = 0; j < circlesize.width; j++ )
-                    corners.push_back(offset + Point3f(0,float(-(2*j + i % 2)*squareSize2),
-                                float(-i*squareSize2)));
+                    corners.push_back(offset + Point3f(0,float(-(2*j + i % 2))*squareSize2,
+                                float(-i)*squareSize2));
             break;
     }
     return corners;

@@ -30,7 +30,7 @@ const int DELAY = 1000;
 const int BUFLEN = 50;
 const char * port = "/dev/ttyACM0";
 
-void getball(Mat& src1, Point2f& point2, Threshold main_thresh);
+bool getball(Mat& src1, Point2f& point2, Threshold main_thresh);
 void printtext(Mat& src, string msg);
 void thresh_load(FileStorage fs, Threshold& t);
 
@@ -82,6 +82,7 @@ int main(/*int argc, char** argv*/)
     char m [BUFLEN];
     float phi, theta;
 
+    Point2f reprojection(0,0);
     while(true)
     {
         blink = false;
@@ -131,11 +132,12 @@ int main(/*int argc, char** argv*/)
 
         if (camerapair.mode() == PNPED)
         {
-            getball(src0, point1, orange0);
-            getball(src1, point2, orange1);
-            if (c == 't')
-            {
-                current_point = camerapair.triangulate(point1, point2);
+            if (c == 't' && 
+                getball(src0, point1, orange0) &&
+                getball(src1, point2, orange1))
+                {
+                current_point = camerapair.triangulate(point1, point2, reprojection);
+
                 msg = format("%0.3f,%0.3f,%0.3f",current_point.at<double>(0,0),
                         current_point.at<double>(0,1),
                         current_point.at<double>(0,2));
@@ -153,6 +155,7 @@ int main(/*int argc, char** argv*/)
             }
         }
 
+        circle(src0,reprojection,5, Scalar(0,0,255), -1);
         printtext(src0, msg);
         imshow("Video Feed 0", src0);
         imshow("Video Feed 1", src1);
@@ -172,7 +175,7 @@ int main(/*int argc, char** argv*/)
     return 0;
 }
 
-void getball(Mat& src, Point2f& point, Threshold main_thresh)
+bool getball(Mat& src, Point2f& point, Threshold main_thresh)
 {
 
     Mat hsv, dst;
@@ -232,7 +235,7 @@ void getball(Mat& src, Point2f& point, Threshold main_thresh)
         drawChessboardCorners(src, circlesize, Mat(points), patternfound);
         point = points[22];
     }
-
+    return patternfound;
     
 }
 

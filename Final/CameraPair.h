@@ -33,7 +33,7 @@ class CameraPair
     public:
         CameraPair();
         void rectify(Size imgsize);
-        Mat triangulate(Point2f point1, Point2f point2);
+        Mat triangulate(Point2f point1, Point2f point2, Point2f& reproject1);
         bool getcorners(Mat& src1, Mat &src2);
         void save();
         int mode() {return m_mode;}

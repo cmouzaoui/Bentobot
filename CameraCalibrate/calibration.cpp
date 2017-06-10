@@ -319,7 +319,7 @@ int main( int argc, char** argv )
     Pattern pattern = CHESSBOARD;
 
     cv::CommandLineParser parser(argc, argv,
-        "{help ||}{w|7|}{h|7|}{pt|chessboard|}{n|20|}{d|5000|}{s|0.024|}{o|out_camera_data.yml|}"
+        "{help ||}{w|4|}{h|11|}{pt|acircles|}{n|20|}{d|5000|}{s|0.016|}{o|out_camera_data.yml|}"
         "{op||}{oe||}{zt||}{a|1|}{p||}{v||}{V||}{su||}"
         "{@input_data|0|}");
     if (parser.has("help"))

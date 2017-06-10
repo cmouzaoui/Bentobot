@@ -287,7 +287,7 @@ void cartToPolar(float x, float y, float z, float& phi, float& theta)
     else
     {
         a = pow(v, 2) - sqrt(pow(v, 4) - g*(g*pow(x, 2) + 2*(z-dz)*pow(v, 2))); // + or - for first sign?
-        b = g*(x);
+        b = g*(x-dx);
         phi = atan(a/b);
     }
 

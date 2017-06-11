@@ -1,8 +1,8 @@
 %YAML:1.0
 ---
 min1: 0
-min2: 142
-min3: 62
-max1: 182
-max2: 217
-max3: 186
+min2: 110
+min3: 118
+max1: 107
+max2: 255
+max3: 255

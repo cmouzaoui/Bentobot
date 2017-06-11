@@ -26,7 +26,7 @@ const string mode_string[] = {"DETECTION","CAPTURING","RECTIFIED","PNPED", "TRIA
 const int threshold_slider_max = 255;
 const int threshold_slider_min = 0;
 
-const int DELAY = 1000;
+const int DELAY = 500;
 const int BUFLEN = 50;
 const char * port = "/dev/ttyACM0";
 
@@ -76,6 +76,7 @@ int main(/*int argc, char** argv*/)
     clock_t prevtimestamp = 0;
     bool found = false;
     bool blink = false;
+    bool AUTO = false;
     string msg;
     Mat current_point;
     
@@ -127,22 +128,24 @@ int main(/*int argc, char** argv*/)
         if ((camerapair.mode() == RECTIFIED || camerapair.mode() == PNPED)
                 && c == 'p')
         {
-            camerapair.pnp(src0_orig);
+            camerapair.pnp(src0_orig,src1);
         }
 
         if (camerapair.mode() == PNPED)
         {
-            if (c == 't' && 
-                getball(src0, point1, orange0) &&
-                getball(src1, point2, orange1))
-                {
+            bool rc = getball(src0, point1, orange0) &&
+                getball(src1, point2, orange1);
+
+            if ((c == 't' || (AUTO && clock() - prevtimestamp > DELAY*1e-3*CLOCKS_PER_SEC)) && rc)
+            {
+                prevtimestamp = clock();
                 current_point = camerapair.triangulate(point1, point2, reprojection);
 
                 msg = format("%0.3f,%0.3f,%0.3f",current_point.at<double>(0,0),
                         current_point.at<double>(0,1),
                         current_point.at<double>(0,2));
                 cartToPolar(current_point.at<double>(0,0), current_point.at<double>(0,1), current_point.at<double>(0,2), phi, theta);
-                sprintf(m,"%f,%f\ns\n",theta,phi);
+                sprintf(m,"%f,%f\n",theta,phi);
                 cout << "Sending over the following message: " << m << endl;
                 serialPuts(fd, m);
             }
@@ -152,6 +155,20 @@ int main(/*int argc, char** argv*/)
             if (c == 's')
             {
                 serialPuts(fd, "s\n");
+            }
+
+        }
+
+        if (c == 'a')
+        {
+            AUTO = !AUTO;
+            if(AUTO)
+            {
+                cout << "Auto mode on!" << endl;
+            }
+            else
+            {
+                cout << "Auto mode off!" << endl;
             }
         }
 
@@ -181,7 +198,7 @@ bool getball(Mat& src, Point2f& point, Threshold main_thresh)
     Mat hsv, dst;
     //convert source image to HSV colorspace
     cvtColor(src,hsv, COLOR_BGR2HSV);
-/*
+
     //apply color range
     inRange(hsv, Scalar(main_thresh.min[0],
                 main_thresh.min[1],
@@ -224,10 +241,12 @@ bool getball(Mat& src, Point2f& point, Threshold main_thresh)
             circle(src, xy, int(radius), Scalar(0,255,255), 2);
             circle(src, center, 5, Scalar(0,0,255), -1);
             point = center;
+            return true;
         }
+        return false;
     }
 
-    */
+    /*
     vector<Point2f> points;
     bool patternfound = findCirclesGrid(src, circlesize, points, CALIB_CB_ASYMMETRIC_GRID);
     if(patternfound)
@@ -236,6 +255,7 @@ bool getball(Mat& src, Point2f& point, Threshold main_thresh)
         point = points[22];
     }
     return patternfound;
+    */
     
 }
 
@@ -268,7 +288,7 @@ void thresh_load(FileStorage fs, Threshold& t)
 
 void cartToPolar(float x, float y, float z, float& phi, float& theta)
 {
-    float a, b, dx = 0.126748, dz = 0.33561, g = 9.807, v = 6.431; // all in m
+    float a, b, dx = 0.126748, dz = 0.33561, g = 9.807, v = 5.940; // all in m
 
     x = sqrt(pow(x-dx,2) + pow(y,2));
     if (x == 0)
@@ -286,8 +306,8 @@ void cartToPolar(float x, float y, float z, float& phi, float& theta)
     }
     else
     {
-        a = pow(v, 2) - sqrt(pow(v, 4) - g*(g*pow(x, 2) + 2*(z-dz)*pow(v, 2))); // + or - for first sign?
-        b = g*(x-dx);
+        a = v*v - sqrt(pow(v, 4) - g*(g*x*x + 2*(z-dz)*v*v)); // + or - for first sign?
+        b = g*x;
         phi = atan(a/b);
     }
 

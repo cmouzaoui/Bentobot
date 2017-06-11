@@ -37,7 +37,7 @@ class CameraPair
         bool getcorners(Mat& src1, Mat &src2);
         void save();
         int mode() {return m_mode;}
-        bool pnp(Mat& src1);
+        bool pnp(Mat& src1, Mat& src2);
         void findScale(Mat& src1, Mat& src2);
         void capture() {m_mode = CAPTURING;};
         bool getcorners_single(Mat& src1, vector<Point2f> & corners, int patterntype);
@@ -67,7 +67,9 @@ class CameraPair
 
         //for pnp()
         Mat m_pnp_r;
+        Mat m_pnp_r2;
         Mat m_pnp_t;
+        Mat m_pnp_t2;
         //storing image points
         vector<vector<Point2f> > m_imagePoints1; 
         vector<vector<Point2f> > m_imagePoints2; 

@@ -40,6 +40,10 @@ CameraPair::CameraPair()
         cout << "m_pnp_r: " << m_pnp_r << endl;
         c3["m_pnp_t"] >> m_pnp_t;
         cout << "m_pnp_t: " << m_pnp_t << endl;
+        c3["m_pnp_r2"] >> m_pnp_r2;
+        cout << "m_pnp_r2: " << m_pnp_r2 << endl;
+        c3["m_pnp_t2"] >> m_pnp_t2;
+        cout << "m_pnp_t2: " << m_pnp_t2 << endl;
         c3["m_scale"] >> m_scale;
         cout << "m_scale: " << m_scale << endl;
         c3["m_scale_error"] >> m_scale_error;
@@ -79,6 +83,8 @@ void CameraPair::save()
     FileStorage c(pnp_name, FileStorage::WRITE);
     c << "m_pnp_r" << m_pnp_r;
     c << "m_pnp_t" << m_pnp_t;
+    c << "m_pnp_r2" << m_pnp_r2;
+    c << "m_pnp_t2" << m_pnp_t2;
     c << "m_scale" << m_scale;
     c << "m_scale_error" << m_scale_error;
     c.release();
@@ -106,6 +112,10 @@ void CameraPair::rectify(Size imgsize)
             m_r, m_t, m_r1, m_r2, m_proj1, m_proj2, m_Q);
     cout << "Projection Marix 1:" << endl << m_proj1 << endl;
     cout << "Projection Matrix 2:" << endl << m_proj2 << endl;
+
+    m_imagePoints1.clear();
+    m_imagePoints2.clear();
+
     m_mode = PNPED;
 
 }
@@ -145,24 +155,27 @@ void CameraPair::findScale(Mat& src1, Mat& src2)
     cout << "Scale stdev: " << m_scale_error/m_scale << endl;
 
 }
-bool CameraPair::pnp(Mat& src1)
+bool CameraPair::pnp(Mat& src1, Mat& src2)
 {
     vector<Point2f> corners;
-    if(!getcorners_single(src1, corners,CIRCLES)) 
+    vector<Point2f> corners1;
+    if(!getcorners_single(src1, corners,CIRCLES) || !getcorners_single(src2, corners1, CIRCLES)) 
         return false;
 
     vector<Point3f> objectPoints = calcCorners(CIRCLES);
 
     solvePnP(objectPoints, corners, m_camMat1, m_dist1, m_pnp_r, m_pnp_t);
+    solvePnP(objectPoints, corners1, m_camMat2, m_dist2, m_pnp_r2, m_pnp_t2);
     Rodrigues(m_pnp_r,m_pnp_r);
-    cout << "Rotation matrix: " << endl << m_pnp_r << endl;
-    cout << "Translation matrix " << endl << m_pnp_t << endl;
+    Rodrigues(m_pnp_r2,m_pnp_r2);
+    cout << "Rotation matrix 1: " << endl << m_pnp_r << endl;
+    cout << "Translation matrix 1: " << endl << m_pnp_t << endl;
 
+    cout << "Rotation matrix 2: " << endl << m_pnp_r2 << endl;
+    cout << "Translation matrix 2: " << endl << m_pnp_t2 << endl;
     m_mode = PNPED;
     save();
     return true;
-
-    return false;
 }
 
 Mat CameraPair::triangulate(Point2f point1, Point2f point2, Point2f& reproject1)
@@ -206,10 +219,10 @@ Mat CameraPair::triangulate(Point2f point1, Point2f point2, Point2f& reproject1)
     //m_pnp_r.copyTo(M1);
     m_pnp_r.copyTo(extrinsic1.colRange(0,3));
     cout << "Extrinsic Matrix 1: " << extrinsic1 << endl;
-    Mat m_pnp_r2 = m_r*m_pnp_r;
-    cout << "Rotation Matrix 2: " << m_pnp_r2 << endl;
-    Mat m_pnp_t2 = m_r*m_pnp_t + m_t;
-    cout << "Translation Matrix 2: " << m_pnp_t2 << endl;
+    //Mat m_pnp_r2 = m_r*m_pnp_r;
+    //cout << "Rotation Matrix 2: " << m_pnp_r2 << endl;
+    //Mat m_pnp_t2 = m_r*m_pnp_t + m_t;
+    //cout << "Translation Matrix 2: " << m_pnp_t2 << endl;
     Mat extrinsic2(3,4,CV_64F);
     M1 = extrinsic2.col(3);
     //m_pnp_t2.copyTo(M1);

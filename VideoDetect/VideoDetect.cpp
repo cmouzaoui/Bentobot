@@ -132,15 +132,15 @@ int main(int argc, char** argv)
 
         //close program when escape key is pressed
         int key = waitKey(1);
-        if (key == 27)
+        if (key == 27 && threshfile.open(thresh_file_name, FileStorage::WRITE))
         {
-            threshfile.open(thresh_file_name, FileStorage::WRITE);
             threshfile << "min1" << main_thresh.min[0];
             threshfile << "min2" << main_thresh.min[1];
             threshfile << "min3" << main_thresh.min[2];
             threshfile << "max1" << main_thresh.max[0];
             threshfile << "max2" << main_thresh.max[1];
             threshfile << "max3" << main_thresh.max[2];
+            cout << "Saved to: " << thresh_file_name << endl;
             threshfile.release();
             break;
         }

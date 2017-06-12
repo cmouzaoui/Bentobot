@@ -10,7 +10,7 @@ const int M2_Dir = 7;    // pin7 = direction of motor 2
 Servo trigger;
 const int servoPin = 10; //yellow signal wire to pin 10
 
-float theta0 = -90, phi0 = 48.76;  //48.76 is when launcher is resting backwards, 3.88 is forward
+float theta0 = -92, phi0 = 48.76;  //48.76 is when launcher is resting backwards, 3.88 is forward
 float theta_now = theta0;
 float phi_now = phi0;
 int theta_increment = 0; 
@@ -18,6 +18,9 @@ int phi_increment = 0;
 
 const int microsteps_per_step = 32;
 const int time_per_step = 5000/microsteps_per_step;
+
+const int vertical_trigger = 85;  //18
+const int turned_trigger = 110;  //60
  
 String main_string;
  
@@ -37,7 +40,7 @@ void setup() {
    trigger.attach(servoPin);
     
    Serial.begin(9600);
-   trigger.write(20);  //starting position so trigger is vertical
+   trigger.write(vertical_trigger);  //starting position so trigger is vertical
    delay(500);
    
    moveTo(0, 48.76);
@@ -189,9 +192,9 @@ void moveTo(float theta, float phi){
 void shoot(){
   Serial.println("Fire in the hole!");
   delay(100);
-  trigger.write(60);
+  trigger.write(turned_trigger);
   delay(500);
-  trigger.write(20);
+  trigger.write(vertical_trigger);
   delay(500);
 }
 
